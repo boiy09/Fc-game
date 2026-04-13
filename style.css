@@ -1,0 +1,75 @@
+:root {
+  color-scheme: light;
+  font-family: "Pretendard", "Noto Sans KR", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f2f5fa;
+  color: #111827;
+}
+
+.layout {
+  max-width: 960px;
+  margin: 24px auto;
+  padding: 0 16px 24px;
+  display: grid;
+  gap: 14px;
+}
+
+.hud,
+.guide {
+  background: #ffffff;
+  border: 1px solid #dbe3ef;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.hud h1 {
+  margin: 0 0 8px;
+  font-size: 1.2rem;
+}
+
+.hud-row {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.help {
+  margin: 0;
+  color: #475569;
+  font-size: 0.92rem;
+}
+
+kbd {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #eef2f7;
+  border: 1px solid #d3dbe7;
+  font-size: 0.82rem;
+}
+
+#game {
+  width: 100%;
+  height: auto;
+  background: #2f8f3f;
+  border: 3px solid #1c5827;
+  border-radius: 10px;
+}
+
+.guide h2 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.guide ul {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.5;
+}
