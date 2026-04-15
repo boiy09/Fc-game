@@ -2,38 +2,14 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Clutch Star - MVP</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>Clutch Star: 풋볼 스토리</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <main class="layout">
-      <section class="hud" aria-label="게임 정보">
-        <h1>Clutch Star (MVP)</h1>
-        <div class="hud-row">
-          <span>점수: <strong id="score">0</strong></span>
-          <span>남은 시간: <strong id="time">90</strong>s</span>
-          <span>남은 체력: <strong id="hp">3</strong></span>
-        </div>
-        <p class="help">
-          이동: <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> 또는 <kbd>WASD</kbd>
-          · 킥: <kbd>Space</kbd> · 재시작: <kbd>R</kbd>
-        </p>
-      </section>
-
-      <canvas id="game" width="900" height="520" aria-label="게임 화면"></canvas>
-
-      <section class="guide" aria-label="목표 설명">
-        <h2>목표</h2>
-        <ul>
-          <li>90초 안에 최대 점수를 획득.</li>
-          <li>공을 차서 노란 타깃(골 존)에 넣으면 +10점.</li>
-          <li>빨간 수비수에게 닿으면 체력 -1.</li>
-          <li>체력 0 또는 시간 종료 시 게임 종료.</li>
-        </ul>
-      </section>
-    </main>
-
+    <div id="app">
+      <canvas id="game"></canvas>
+    </div>
     <script src="game.js"></script>
   </body>
 </html>
