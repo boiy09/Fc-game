@@ -11,7 +11,7 @@ const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0x0a1628, 0.04);
 
 const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
-camera.position.set(0, 10, 15);
+camera.position.set(0, 14, 20);
 camera.lookAt(0, 0, -1);
 
 function onResize() {
@@ -199,18 +199,54 @@ function buildGoal() {
 
 function makePlayerMesh(color) {
   const g = new THREE.Group();
-  // body
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.32,0.32,0.55,14), makeMat(color));
-  body.position.y=0.28; body.castShadow=true; g.add(body);
-  // head
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.25,14,14), makeMat(0xffcba4,0.9,0));
-  head.position.y=0.82; head.castShadow=true; g.add(head);
-  // shadow ring
-  const ring = new THREE.Mesh(
-    new THREE.RingGeometry(0.32,0.42,32),
-    new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0.25,side:THREE.DoubleSide})
-  );
-  ring.rotation.x=-Math.PI/2; ring.position.y=0.002; g.add(ring);
+  const jMat = makeMat(color);
+  const sMat = makeMat(0xffcba4, 0.85, 0);   // skin
+  const wMat = makeMat(0xf0f0f0, 0.8, 0);    // white shorts/socks
+  const bMat = makeMat(0x111111, 0.95, 0);   // boots
+  const hMat = makeMat(0x3d2b1f, 0.9, 0);    // hair
+
+  // Ground shadow
+  const shd = new THREE.Mesh(new THREE.CircleGeometry(0.22,16),
+    new THREE.MeshBasicMaterial({color:0,transparent:true,opacity:0.22,side:THREE.DoubleSide}));
+  shd.rotation.x=-Math.PI/2; shd.position.y=0.005; g.add(shd);
+
+  // Boots
+  [-0.09,0.09].forEach(x=>{
+    const boot=new THREE.Mesh(new THREE.BoxGeometry(0.11,0.07,0.18),bMat);
+    boot.position.set(x,0.035,0.025); boot.castShadow=true; g.add(boot);
+  });
+  // Lower legs / socks
+  [-0.09,0.09].forEach(x=>{
+    const sock=new THREE.Mesh(new THREE.CylinderGeometry(0.058,0.054,0.19,6),wMat);
+    sock.position.set(x,0.17,0); sock.castShadow=true; g.add(sock);
+  });
+  // Shorts
+  const shorts=new THREE.Mesh(new THREE.CylinderGeometry(0.155,0.14,0.18,8),wMat);
+  shorts.position.y=0.36; shorts.castShadow=true; g.add(shorts);
+  // Upper legs
+  [-0.09,0.09].forEach(x=>{
+    const thigh=new THREE.Mesh(new THREE.CylinderGeometry(0.072,0.065,0.17,6),sMat);
+    thigh.position.set(x,0.27,0); thigh.castShadow=true; g.add(thigh);
+  });
+  // Torso (jersey)
+  const torso=new THREE.Mesh(new THREE.BoxGeometry(0.31,0.37,0.19),jMat);
+  torso.position.y=0.63; torso.castShadow=true; g.add(torso);
+  // Arms
+  [[-0.24,Math.PI/9],[0.24,-Math.PI/9]].forEach(([x,rz])=>{
+    const arm=new THREE.Mesh(new THREE.CylinderGeometry(0.056,0.048,0.32,6),jMat);
+    arm.position.set(x,0.62,0); arm.rotation.z=rz; arm.castShadow=true; g.add(arm);
+  });
+  // Neck
+  const neck=new THREE.Mesh(new THREE.CylinderGeometry(0.068,0.072,0.1,6),sMat);
+  neck.position.y=0.87; g.add(neck);
+  // Head
+  const head=new THREE.Mesh(new THREE.SphereGeometry(0.145,12,10),sMat);
+  head.position.y=1.05; head.castShadow=true; g.add(head);
+  // Hair cap (upper hemisphere)
+  const hair=new THREE.Mesh(
+    new THREE.SphereGeometry(0.15,12,8,0,Math.PI*2,0,Math.PI*0.46),hMat);
+  hair.position.y=1.05; g.add(hair);
+
   return g;
 }
 
@@ -670,9 +706,132 @@ document.getElementById('btn-next').addEventListener('click',()=>{
 });
 document.getElementById('btn-to-select').addEventListener('click',()=>{ buildSelectScreen(); showScreen('screen-select'); });
 
+// ── STADIUM ───────────────────────────────────────────────
+function buildStadium() {
+  const concMat = new THREE.MeshStandardMaterial({ color: 0x8b9aad, roughness: 0.92 });
+  const trackMat = new THREE.MeshStandardMaterial({ color: 0xc05a2a, roughness: 0.85 });
+  const roofMat = new THREE.MeshStandardMaterial({ color: 0x1a2535, roughness: 0.5, metalness: 0.4, transparent: true, opacity: 0.88, side: THREE.DoubleSide });
+  const seatCols = [0x1d3f82, 0xc0392b, 0xdddddd, 0x1a5a36, 0xe6b800];
+  const TIERS=5, TW=0.9, TH=0.75;
+
+  // Running track strips
+  [{x:0,z:-7.1,w:9.8,d:0.9},{x:0,z:7.1,w:9.8,d:0.9},{x:-4.85,z:0,w:0.75,d:14.8},{x:4.85,z:0,w:0.75,d:14.8}]
+  .forEach(({x,z,w,d})=>{
+    const t=new THREE.Mesh(new THREE.BoxGeometry(w,0.015,d),trackMat);
+    t.position.set(x,0.007,z); scene.add(t);
+  });
+
+  // Side stands (west / east)
+  [-1,1].forEach(side=>{
+    const bx=side*5.1;
+    for(let t=0;t<TIERS;t++){
+      const px=bx+side*(t*TW+TW*0.5), py=t*TH+TH*0.5;
+      const slab=new THREE.Mesh(new THREE.BoxGeometry(TW,TH,16.4),concMat);
+      slab.position.set(px,py,0); slab.receiveShadow=true; slab.castShadow=true; scene.add(slab);
+      const seat=new THREE.Mesh(new THREE.BoxGeometry(TW*0.85,0.07,16.4),
+        new THREE.MeshStandardMaterial({color:seatCols[t%seatCols.length],roughness:0.7}));
+      seat.position.set(px,t*TH+TH+0.035,0); scene.add(seat);
+    }
+    // back wall
+    const wall=new THREE.Mesh(new THREE.BoxGeometry(0.3,TIERS*TH+0.4,16.4),concMat);
+    wall.position.set(bx+side*(TIERS*TW+0.15),TIERS*TH*0.5,0); wall.castShadow=true; scene.add(wall);
+    // roof overhang
+    const roof=new THREE.Mesh(new THREE.BoxGeometry(TIERS*TW+0.6,0.18,16.8),roofMat);
+    roof.position.set(bx+side*(TIERS*TW*0.5),TIERS*TH+0.75,0); scene.add(roof);
+  });
+
+  // End stands (north / south)
+  [-1,1].forEach(side=>{
+    const bz=side*7.6; const nT=4;
+    for(let t=0;t<nT;t++){
+      const pz=bz+side*(t*TW+TW*0.5), py=t*TH+TH*0.5;
+      const slab=new THREE.Mesh(new THREE.BoxGeometry(9.2,TH,TW),concMat);
+      slab.position.set(0,py,pz); slab.receiveShadow=true; slab.castShadow=true; scene.add(slab);
+      const seat=new THREE.Mesh(new THREE.BoxGeometry(9.2,0.07,TW*0.85),
+        new THREE.MeshStandardMaterial({color:seatCols[t%seatCols.length],roughness:0.7}));
+      seat.position.set(0,t*TH+TH+0.035,pz); scene.add(seat);
+    }
+    const roof=new THREE.Mesh(new THREE.BoxGeometry(9.6,0.18,nT*TW+0.5),roofMat);
+    roof.position.set(0,nT*TH+0.75,bz+side*nT*TW*0.5); scene.add(roof);
+  });
+
+  // Corner pillars
+  [[-1,-1],[-1,1],[1,-1],[1,1]].forEach(([sx,sz])=>{
+    const px=sx*(5.1+TIERS*TW*0.5), pz=sz*(7.6+2*TW*0.5);
+    const pillar=new THREE.Mesh(new THREE.CylinderGeometry(0.25,0.3,TIERS*TH+1,8),concMat);
+    pillar.position.set(px,TIERS*TH*0.5,pz); pillar.castShadow=true; scene.add(pillar);
+  });
+
+  // Floodlight poles (4 corners)
+  const poleMat=makeMat(0xc8d4e0,0.4,0.6);
+  const lampMat=new THREE.MeshStandardMaterial({color:0xfff8e0,emissive:0xfff5cc,emissiveIntensity:0.9});
+  [[-10,-9],[10,-9],[-10,9],[10,9]].forEach(([px,pz])=>{
+    const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.13,0.2,12,8),poleMat);
+    pole.position.set(px,6,pz); pole.castShadow=true; scene.add(pole);
+    const lamp=new THREE.Mesh(new THREE.BoxGeometry(1.8,0.35,0.7),lampMat);
+    lamp.position.set(px,12.2,pz); scene.add(lamp);
+    const pl=new THREE.PointLight(0xfff5e0,1.8,35);
+    pl.position.set(px,12,pz); scene.add(pl);
+  });
+
+  // Crowd
+  buildCrowd(TIERS,TW,TH);
+}
+
+function buildCrowd(TIERS,TW,TH) {
+  const dummy=new THREE.Object3D();
+  const bodyGeo=new THREE.CylinderGeometry(0.065,0.082,0.22,5);
+  const headGeo=new THREE.SphereGeometry(0.078,5,4);
+  const skinMat=new THREE.MeshStandardMaterial({color:0xffcba4,roughness:0.9});
+
+  [{color:0x1d4ed8,n:200},{color:0xdc2626,n:140},{color:0xffffff,n:110},{color:0xf5c518,n:80}]
+  .forEach(({color,n})=>{
+    const mat=new THREE.MeshStandardMaterial({color,roughness:0.9});
+    const bIM=new THREE.InstancedMesh(bodyGeo,mat,n);
+    const hIM=new THREE.InstancedMesh(headGeo,skinMat,n);
+    let idx=0;
+
+    function place(x,y,z){
+      if(idx>=n) return;
+      const jx=x+(Math.random()-0.5)*0.22, jz=z+(Math.random()-0.5)*0.22;
+      dummy.position.set(jx,y+0.12,jz); dummy.rotation.y=Math.random()*Math.PI*2; dummy.updateMatrix();
+      bIM.setMatrixAt(idx,dummy.matrix);
+      dummy.position.y=y+0.31; dummy.updateMatrix();
+      hIM.setMatrixAt(idx,dummy.matrix);
+      idx++;
+    }
+
+    // Side stands
+    [-1,1].forEach(side=>{
+      const bx=side*5.1;
+      for(let t=0;t<TIERS;t++){
+        const px=bx+side*(t*TW+TW*0.5), py=t*TH+TH+0.08;
+        for(let r=0;r<22;r++){
+          if(Math.random()<0.13) continue;
+          place(px,py,-7.4+r*0.7);
+        }
+      }
+    });
+    // End stands
+    [-1,1].forEach(side=>{
+      const bz=side*7.6;
+      for(let t=0;t<4;t++){
+        const pz=bz+side*(t*TW+TW*0.5), py=t*TH+TH+0.08;
+        for(let c=0;c<13;c++){
+          if(Math.random()<0.1) continue;
+          place(-4.0+c*0.65,py,pz);
+        }
+      }
+    });
+
+    bIM.instanceMatrix.needsUpdate=true; hIM.instanceMatrix.needsUpdate=true;
+    scene.add(bIM); scene.add(hIM);
+  });
+}
+
 // ── MAIN LOOP ─────────────────────────────────────────────
 function buildScene() {
-  buildField(); buildGoal();
+  buildField(); buildGoal(); buildStadium();
   selRing = makeSelRing();
   aimLine = makeAimLine();
   initParticles();
