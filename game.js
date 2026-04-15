@@ -117,7 +117,7 @@ const G = {
 
 // ── 3D SCENE OBJECTS ──────────────────────────────────────
 let ballMesh, playerMeshes = [], defMeshes = [], gkMesh;
-let selRing, aimLine, aimLinePts = [];
+let selRing, aimLine, aimLinePts = [], powerRing;
 let particles = [], ptMesh;
 
 function makeMat(color, rough=0.7, metal=0.1){
@@ -210,43 +210,55 @@ function makePlayerMesh(color) {
     new THREE.MeshBasicMaterial({color:0,transparent:true,opacity:0.22,side:THREE.DoubleSide}));
   shd.rotation.x=-Math.PI/2; shd.position.y=0.005; g.add(shd);
 
-  // Boots
-  [-0.09,0.09].forEach(x=>{
-    const boot=new THREE.Mesh(new THREE.BoxGeometry(0.11,0.07,0.18),bMat);
-    boot.position.set(x,0.035,0.025); boot.castShadow=true; g.add(boot);
-  });
-  // Lower legs / socks
-  [-0.09,0.09].forEach(x=>{
-    const sock=new THREE.Mesh(new THREE.CylinderGeometry(0.058,0.054,0.19,6),wMat);
-    sock.position.set(x,0.17,0); sock.castShadow=true; g.add(sock);
-  });
-  // Shorts
-  const shorts=new THREE.Mesh(new THREE.CylinderGeometry(0.155,0.14,0.18,8),wMat);
+  // Leg pivot groups — pivot sits at hip height (y=0.36) so rotation.x swings leg
+  function makeLeg(xOff) {
+    const pivot = new THREE.Group();
+    pivot.position.set(xOff, 0.36, 0);
+    const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.072,0.065,0.17,6),sMat);
+    thigh.position.y=-0.085; thigh.castShadow=true; pivot.add(thigh);
+    const sock = new THREE.Mesh(new THREE.CylinderGeometry(0.058,0.054,0.19,6),wMat);
+    sock.position.y=-0.19; sock.castShadow=true; pivot.add(sock);
+    const boot = new THREE.Mesh(new THREE.BoxGeometry(0.11,0.07,0.18),bMat);
+    boot.position.set(0,-0.325,0.025); boot.castShadow=true; pivot.add(boot);
+    g.add(pivot); return pivot;
+  }
+  const lLeg = makeLeg(-0.09);
+  const rLeg = makeLeg(0.09);
+
+  // Shorts (static, covers hips)
+  const shorts = new THREE.Mesh(new THREE.CylinderGeometry(0.155,0.14,0.18,8),wMat);
   shorts.position.y=0.36; shorts.castShadow=true; g.add(shorts);
-  // Upper legs
-  [-0.09,0.09].forEach(x=>{
-    const thigh=new THREE.Mesh(new THREE.CylinderGeometry(0.072,0.065,0.17,6),sMat);
-    thigh.position.set(x,0.27,0); thigh.castShadow=true; g.add(thigh);
-  });
+
   // Torso (jersey)
-  const torso=new THREE.Mesh(new THREE.BoxGeometry(0.31,0.37,0.19),jMat);
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.31,0.37,0.19),jMat);
   torso.position.y=0.63; torso.castShadow=true; g.add(torso);
-  // Arms
-  [[-0.24,Math.PI/9],[0.24,-Math.PI/9]].forEach(([x,rz])=>{
-    const arm=new THREE.Mesh(new THREE.CylinderGeometry(0.056,0.048,0.32,6),jMat);
-    arm.position.set(x,0.62,0); arm.rotation.z=rz; arm.castShadow=true; g.add(arm);
-  });
+
+  // Arm pivot groups — pivot at shoulder (y=0.82), arm hangs below
+  function makeArm(xOff, rzBase) {
+    const pivot = new THREE.Group();
+    pivot.position.set(xOff, 0.82, 0);
+    pivot.rotation.z = rzBase;
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.056,0.048,0.32,6),jMat);
+    arm.position.y=-0.16; arm.castShadow=true; pivot.add(arm);
+    g.add(pivot); return pivot;
+  }
+  const lArm = makeArm(-0.24, Math.PI/9);
+  const rArm = makeArm(0.24, -Math.PI/9);
+
   // Neck
-  const neck=new THREE.Mesh(new THREE.CylinderGeometry(0.068,0.072,0.1,6),sMat);
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.068,0.072,0.1,6),sMat);
   neck.position.y=0.87; g.add(neck);
   // Head
-  const head=new THREE.Mesh(new THREE.SphereGeometry(0.145,12,10),sMat);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.145,12,10),sMat);
   head.position.y=1.05; head.castShadow=true; g.add(head);
   // Hair cap (upper hemisphere)
-  const hair=new THREE.Mesh(
+  const hair = new THREE.Mesh(
     new THREE.SphereGeometry(0.15,12,8,0,Math.PI*2,0,Math.PI*0.46),hMat);
   hair.position.y=1.05; g.add(hair);
 
+  // Store limb refs for per-frame animation
+  g.userData.lLeg = lLeg; g.userData.rLeg = rLeg;
+  g.userData.lArm = lArm; g.userData.rArm = rArm;
   return g;
 }
 
@@ -276,8 +288,17 @@ function makeSelRing() {
 function makeAimLine() {
   const pts=[new THREE.Vector3(0,0.1,0),new THREE.Vector3(0,0.1,0)];
   const geo=new THREE.BufferGeometry().setFromPoints(pts);
-  const m=new THREE.Line(geo,new THREE.LineDashedMaterial({color:0xffffff,dashSize:0.15,gapSize:0.1,transparent:true,opacity:0.7}));
+  const m=new THREE.Line(geo,new THREE.LineDashedMaterial({color:0xfacc15,dashSize:0.18,gapSize:0.09,transparent:true,opacity:0.9}));
   m.computeLineDistances(); m.visible=false; scene.add(m); return m;
+}
+
+function makePowerRing() {
+  const r = new THREE.Mesh(
+    new THREE.TorusGeometry(0.5, 0.045, 8, 32),
+    new THREE.MeshBasicMaterial({color:0xfacc15, transparent:true, opacity:0.82})
+  );
+  r.rotation.x = Math.PI/2; r.position.y = 0.06; r.visible = false;
+  scene.add(r); return r;
 }
 
 // Particle pool for goals
@@ -324,16 +345,15 @@ function onPointerDown(e) {
   if (G.screen !== 'play' || !G.play) return;
   const play = G.play;
   if (play.phase !== 'idle') return;
-  const fp = getFieldPos(e);
-  if (!fp) return;
+  // Tap anywhere on field starts aiming from the ball holder
   const holder = play.players[play.ballHolder];
   const hp = to3(holder.x, holder.y);
-  const hv = new THREE.Vector3(hp.x, 0, hp.z);
-  if (dist3(fp, hv) < 0.55) {
-    play.phase = 'aiming';
-    dragStart3 = hv.clone();
-    aimLine.visible = true;
-  }
+  play.phase = 'aiming';
+  dragStart3 = new THREE.Vector3(hp.x, 0, hp.z);
+  aimLine.visible = true;
+  powerRing.position.set(hp.x, 0.06, hp.z);
+  powerRing.scale.setScalar(0.3);
+  powerRing.visible = true;
 }
 
 function onPointerMove(e) {
@@ -341,6 +361,11 @@ function onPointerMove(e) {
   const fp = getFieldPos(e);
   if (!fp || !dragStart3) return;
   updateAimLine(dragStart3, fp);
+  // Power ring grows and changes color with drag distance
+  const dx = fp.x - dragStart3.x, dz = fp.z - dragStart3.z;
+  const power = clamp(Math.hypot(dx, dz) / 3.2, 0, 1);
+  powerRing.scale.setScalar(0.3 + power * 2.8);
+  powerRing.material.color.setHex(power > 0.65 ? 0xef4444 : power > 0.35 ? 0xf97316 : 0xfacc15);
 }
 
 function onPointerUp(e) {
@@ -349,6 +374,7 @@ function onPointerUp(e) {
   if (play.phase !== 'aiming') return;
   const fp = getFieldPos(e);
   aimLine.visible = false;
+  powerRing.visible = false;
   if (!fp || !dragStart3) { play.phase='idle'; return; }
   const dx = fp.x - dragStart3.x, dz = fp.z - dragStart3.z;
   const power3 = clamp(Math.hypot(dx,dz), 0, 3.2); // 3.2 = MAX_DRAG/50
@@ -593,25 +619,70 @@ function spawnActors() {
 }
 
 function syncActors(play, pulse) {
-  play.players.forEach((p,i)=>{
-    const p3=to3(p.x,p.y); playerMeshes[i].position.set(p3.x,0,p3.z);
-    const sc=i===play.ballHolder?(1+0.05*Math.sin(pulse*0.12)):1;
-    playerMeshes[i].scale.setScalar(sc);
+  // Ball-holder idle sway + leg rock
+  play.players.forEach((p,i) => {
+    const m = playerMeshes[i];
+    const p3 = to3(p.x, p.y);
+    m.position.set(p3.x, 0, p3.z);
+    const ud = m.userData;
+    if (i === play.ballHolder) {
+      m.scale.setScalar(1 + 0.05 * Math.sin(pulse * 0.12));
+      if (ud.lLeg) {
+        const idle = Math.sin(pulse * 0.05) * 0.08;
+        ud.lLeg.rotation.x =  idle; ud.rLeg.rotation.x = -idle;
+        ud.lArm.rotation.x = -idle * 0.5; ud.rArm.rotation.x = idle * 0.5;
+      }
+    } else {
+      m.scale.setScalar(1);
+    }
   });
-  play.defenders.forEach((d,i)=>{
-    const d3=to3(d.x,d.y); defMeshes[i].position.set(d3.x,0,d3.z);
-  });
-  const g3=to3(play.gk.x,play.gk.y); gkMesh.position.set(g3.x,0,g3.z);
-  const b3=to3(play.ball.x,play.ball.y);
-  if(ballMesh){ ballMesh.position.x=b3.x; ballMesh.position.z=b3.z; }
-  // Spin ball during flight
-  if(play.phase==='flying' && ballMesh) ballMesh.rotation.x+=0.15;
 
-  // Sel ring
-  const hp=to3(play.players[play.ballHolder].x,play.players[play.ballHolder].y);
-  selRing.position.set(hp.x,0.04,hp.z);
-  selRing.visible = play.phase==='idle'||play.phase==='aiming';
-  selRing.material.opacity = 0.6+0.3*Math.sin(pulse*0.12);
+  // Defenders: running animation + face movement direction
+  play.defenders.forEach((d,i) => {
+    const m = defMeshes[i];
+    const d3 = to3(d.x, d.y);
+    const prevX = m.position.x, prevZ = m.position.z;
+    m.position.set(d3.x, 0, d3.z);
+    if (!d.isWall) {
+      const mvx = d3.x - prevX, mvz = d3.z - prevZ;
+      if (Math.hypot(mvx, mvz) > 0.0005) m.rotation.y = Math.atan2(-mvx, -mvz);
+      const ud = m.userData;
+      if (ud.lLeg) {
+        const s = Math.sin(pulse * 0.07 + i * 1.2) * 0.45;
+        ud.lLeg.rotation.x =  s; ud.rLeg.rotation.x = -s;
+        ud.lArm.rotation.x = -s * 0.5; ud.rArm.rotation.x = s * 0.5;
+      }
+    }
+  });
+
+  // GK faces field, shuffles side to side
+  const g3 = to3(play.gk.x, play.gk.y);
+  gkMesh.position.set(g3.x, 0, g3.z);
+  gkMesh.rotation.y = Math.PI;
+  const gkUD = gkMesh.userData;
+  if (gkUD.lLeg) {
+    const gs = Math.sin(pulse * 0.09) * 0.15;
+    gkUD.lLeg.rotation.x = gs; gkUD.rLeg.rotation.x = -gs;
+  }
+
+  // Ball position
+  const b3 = to3(play.ball.x, play.ball.y);
+  if (ballMesh) { ballMesh.position.x = b3.x; ballMesh.position.z = b3.z; }
+
+  // Spin ball perpendicular to travel direction during flight
+  if (play.phase === 'flying' && ballMesh && play.ballAnim) {
+    const a = play.ballAnim;
+    const tdx = a.tx - a.sx, tdz = a.tz - a.sz;
+    const len = Math.hypot(tdx, tdz) || 1;
+    ballMesh.rotation.x += (tdz / len) * 0.18;
+    ballMesh.rotation.z -= (tdx / len) * 0.18;
+  }
+
+  // Sel ring pulses around ball holder
+  const hp = to3(play.players[play.ballHolder].x, play.players[play.ballHolder].y);
+  selRing.position.set(hp.x, 0.04, hp.z);
+  selRing.visible = play.phase === 'idle' || play.phase === 'aiming';
+  selRing.material.opacity = 0.6 + 0.3 * Math.sin(pulse * 0.12);
 }
 
 // ── HUD ───────────────────────────────────────────────────
@@ -834,6 +905,7 @@ function buildScene() {
   buildField(); buildGoal(); buildStadium();
   selRing = makeSelRing();
   aimLine = makeAimLine();
+  powerRing = makePowerRing();
   initParticles();
 }
 
