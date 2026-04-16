@@ -37,7 +37,7 @@ const sun = new THREE.DirectionalLight(0xfffdf5, 2.4);
 sun.position.set(6, 14, 8);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
-Object.assign(sun.shadow.camera, { left: -12, right: 12, top: 12, bottom: -12, near: 0.1, far: 60 });
+Object.assign(sun.shadow.camera, { left: -20, right: 20, top: 24, bottom: -24, near: 0.1, far: 80 });
 scene.add(sun);
 const fill = new THREE.DirectionalLight(0x4488ff, 0.25);
 fill.position.set(-6, 8, -6);
@@ -116,7 +116,7 @@ const G = {
 };
 
 // ── 3D SCENE OBJECTS ──────────────────────────────────────
-let ballMesh, playerMeshes = [], defMeshes = [], gkMesh;
+let ballMesh, playerMeshes = [], defMeshes = [], gkMesh, bgMeshes = [];
 let selRing, aimLine, aimLinePts = [], powerRing;
 let aimDotPool = [], ballGroundShadow;
 let particles = [], ptMesh;
@@ -126,21 +126,21 @@ function makeMat(color, rough=0.7, metal=0.1){
 }
 
 function buildField() {
-  // Grass base — vibrant pitch green
+  // Grass base — vibrant pitch green (larger than line markings for realistic apron)
   const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(8.4, 13.6),
+    new THREE.PlaneGeometry(16, 22),
     makeMat(0x2a9e42, 0.88, 0)
   );
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
   scene.add(ground);
 
-  // Mowing stripes
-  for (let i = 0; i < 10; i++) {
+  // Mowing stripes across full grass area
+  for (let i = 0; i < 11; i++) {
     if (i % 2 === 0) {
-      const s = new THREE.Mesh(new THREE.PlaneGeometry(8.4, 1.36), makeMat(0x2eb84e, 0.88, 0));
+      const s = new THREE.Mesh(new THREE.PlaneGeometry(16, 2), makeMat(0x2eb84e, 0.88, 0));
       s.rotation.x = -Math.PI / 2;
-      s.position.set(0, 0.001, -6.12 + i * 1.36 + 0.68);
+      s.position.set(0, 0.001, -10 + i * 2 + 1);
       s.receiveShadow = true;
       scene.add(s);
     }
@@ -638,9 +638,9 @@ function tickParticles() {
 // ── ACTOR SPAWN + SYNC ────────────────────────────────────
 function spawnActors() {
   // Clear old
-  [...playerMeshes, ...defMeshes].forEach(m=>scene.remove(m));
+  [...playerMeshes, ...defMeshes, ...bgMeshes].forEach(m=>scene.remove(m));
   if(gkMesh) scene.remove(gkMesh);
-  playerMeshes=[]; defMeshes=[];
+  playerMeshes=[]; defMeshes=[]; bgMeshes=[];
 
   const play=G.play;
   play.players.forEach(p=>{
@@ -658,6 +658,26 @@ function spawnActors() {
   if(ballMesh) scene.remove(ballMesh);
   ballMesh = makeBallMesh();
   const b3=to3(play.ball.x,play.ball.y); ballMesh.position.set(b3.x,0.18,b3.z); scene.add(ballMesh);
+
+  // 11v11 background players (decorative — fill formation)
+  const bgBlue = [
+    {x:148,y:578},{x:182,y:576},{x:238,y:576},{x:272,y:578}, // defenders
+    {x:152,y:518},{x:268,y:518},                               // wide mids
+    {x:182,y:545},{x:238,y:545},                               // central mids
+  ];
+  const bgRed = [
+    {x:148,y:192},{x:182,y:188},{x:238,y:188},{x:272,y:192}, // defenders
+    {x:152,y:268},{x:268,y:268},                               // wide mids
+    {x:182,y:235},{x:238,y:235},                               // central mids
+  ];
+  bgBlue.forEach(p=>{
+    const m=makePlayerMesh(0x1d4ed8);
+    const p3=to3(p.x,p.y); m.position.set(p3.x,0,p3.z); scene.add(m); bgMeshes.push(m);
+  });
+  bgRed.forEach(p=>{
+    const m=makePlayerMesh(0xdc2626);
+    const p3=to3(p.x,p.y); m.position.set(p3.x,0,p3.z); scene.add(m); bgMeshes.push(m);
+  });
 
   // Sel ring follows ball holder
   scene.remove(selRing);
@@ -842,64 +862,60 @@ function buildStadium() {
   const seatCols = [0x1d3f82, 0xc0392b, 0xdddddd, 0x1a5a36, 0xe6b800];
   const TIERS=5, TW=0.9, TH=0.75;
 
-  // Running track strips
-  [{x:0,z:-7.1,w:9.8,d:0.9},{x:0,z:7.1,w:9.8,d:0.9},{x:-4.85,z:0,w:0.75,d:14.8},{x:4.85,z:0,w:0.75,d:14.8}]
+  // Running track strips (outside field lines)
+  [{x:0,z:-7.6,w:11,d:0.85},{x:0,z:7.6,w:11,d:0.85},{x:-5.3,z:0,w:0.8,d:16.6},{x:5.3,z:0,w:0.8,d:16.6}]
   .forEach(({x,z,w,d})=>{
     const t=new THREE.Mesh(new THREE.BoxGeometry(w,0.015,d),trackMat);
     t.position.set(x,0.007,z); scene.add(t);
   });
 
-  // Side stands (west / east)
+  // Side stands (west / east) — pushed further out for bigger stadium
   [-1,1].forEach(side=>{
-    const bx=side*5.1;
+    const bx=side*6.5;
     for(let t=0;t<TIERS;t++){
       const px=bx+side*(t*TW+TW*0.5), py=t*TH+TH*0.5;
-      const slab=new THREE.Mesh(new THREE.BoxGeometry(TW,TH,16.4),concMat);
+      const slab=new THREE.Mesh(new THREE.BoxGeometry(TW,TH,22),concMat);
       slab.position.set(px,py,0); slab.receiveShadow=true; slab.castShadow=true; scene.add(slab);
-      const seat=new THREE.Mesh(new THREE.BoxGeometry(TW*0.85,0.07,16.4),
+      const seat=new THREE.Mesh(new THREE.BoxGeometry(TW*0.85,0.07,22),
         new THREE.MeshStandardMaterial({color:seatCols[t%seatCols.length],roughness:0.7}));
       seat.position.set(px,t*TH+TH+0.035,0); scene.add(seat);
     }
-    // back wall
-    const wall=new THREE.Mesh(new THREE.BoxGeometry(0.3,TIERS*TH+0.4,16.4),concMat);
+    const wall=new THREE.Mesh(new THREE.BoxGeometry(0.3,TIERS*TH+0.4,22),concMat);
     wall.position.set(bx+side*(TIERS*TW+0.15),TIERS*TH*0.5,0); wall.castShadow=true; scene.add(wall);
-    // roof overhang
-    const roof=new THREE.Mesh(new THREE.BoxGeometry(TIERS*TW+0.6,0.18,16.8),roofMat);
+    const roof=new THREE.Mesh(new THREE.BoxGeometry(TIERS*TW+0.6,0.18,22.4),roofMat);
     roof.position.set(bx+side*(TIERS*TW*0.5),TIERS*TH+0.75,0); scene.add(roof);
   });
 
-  // End stands (north / south)
-  [-1,1].forEach(side=>{
-    const bz=side*7.6; const nT=4;
-    for(let t=0;t<nT;t++){
-      const pz=bz+side*(t*TW+TW*0.5), py=t*TH+TH*0.5;
-      const slab=new THREE.Mesh(new THREE.BoxGeometry(9.2,TH,TW),concMat);
-      slab.position.set(0,py,pz); slab.receiveShadow=true; slab.castShadow=true; scene.add(slab);
-      const seat=new THREE.Mesh(new THREE.BoxGeometry(9.2,0.07,TW*0.85),
-        new THREE.MeshStandardMaterial({color:seatCols[t%seatCols.length],roughness:0.7}));
-      seat.position.set(0,t*TH+TH+0.035,pz); scene.add(seat);
-    }
-    const roof=new THREE.Mesh(new THREE.BoxGeometry(9.6,0.18,nT*TW+0.5),roofMat);
-    roof.position.set(0,nT*TH+0.75,bz+side*nT*TW*0.5); scene.add(roof);
-  });
+  // End stands — NORTH ONLY (south removed so camera behind player is unobstructed)
+  const bz=-9.5; const nT=4;
+  for(let t=0;t<nT;t++){
+    const pz=bz-(t*TW+TW*0.5), py=t*TH+TH*0.5;
+    const slab=new THREE.Mesh(new THREE.BoxGeometry(14,TH,TW),concMat);
+    slab.position.set(0,py,pz); slab.receiveShadow=true; slab.castShadow=true; scene.add(slab);
+    const seat=new THREE.Mesh(new THREE.BoxGeometry(14,0.07,TW*0.85),
+      new THREE.MeshStandardMaterial({color:seatCols[t%seatCols.length],roughness:0.7}));
+    seat.position.set(0,t*TH+TH+0.035,pz); scene.add(seat);
+  }
+  const nRoof=new THREE.Mesh(new THREE.BoxGeometry(14.4,0.18,nT*TW+0.5),roofMat);
+  nRoof.position.set(0,nT*TH+0.75,bz-nT*TW*0.5); scene.add(nRoof);
 
-  // Corner pillars
-  [[-1,-1],[-1,1],[1,-1],[1,1]].forEach(([sx,sz])=>{
-    const px=sx*(5.1+TIERS*TW*0.5), pz=sz*(7.6+2*TW*0.5);
-    const pillar=new THREE.Mesh(new THREE.CylinderGeometry(0.25,0.3,TIERS*TH+1,8),concMat);
+  // Corner pillars (only north corners)
+  [[-1,-1],[1,-1]].forEach(([sx,sz])=>{
+    const px=sx*(6.5+TIERS*TW*0.5), pz=sz*(9.5+2*TW*0.5);
+    const pillar=new THREE.Mesh(new THREE.CylinderGeometry(0.28,0.34,TIERS*TH+1,8),concMat);
     pillar.position.set(px,TIERS*TH*0.5,pz); pillar.castShadow=true; scene.add(pillar);
   });
 
-  // Floodlight poles (4 corners)
+  // Floodlight poles — larger stadium positions
   const poleMat=makeMat(0xc8d4e0,0.4,0.6);
   const lampMat=new THREE.MeshStandardMaterial({color:0xfff8e0,emissive:0xfff5cc,emissiveIntensity:0.9});
-  [[-10,-9],[10,-9],[-10,9],[10,9]].forEach(([px,pz])=>{
-    const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.13,0.2,12,8),poleMat);
-    pole.position.set(px,6,pz); pole.castShadow=true; scene.add(pole);
-    const lamp=new THREE.Mesh(new THREE.BoxGeometry(1.8,0.35,0.7),lampMat);
-    lamp.position.set(px,12.2,pz); scene.add(lamp);
-    const pl=new THREE.PointLight(0xfff5e0,2.8,40);
-    pl.position.set(px,12,pz); scene.add(pl);
+  [[-13,-12],[13,-12],[-13,12],[13,12]].forEach(([px,pz])=>{
+    const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.13,0.2,14,8),poleMat);
+    pole.position.set(px,7,pz); pole.castShadow=true; scene.add(pole);
+    const lamp=new THREE.Mesh(new THREE.BoxGeometry(2.2,0.4,0.8),lampMat);
+    lamp.position.set(px,14.2,pz); scene.add(lamp);
+    const pl=new THREE.PointLight(0xfff5e0,3.2,55);
+    pl.position.set(px,14,pz); scene.add(pl);
   });
 
   // Crowd
@@ -929,28 +945,26 @@ function buildCrowd(TIERS,TW,TH) {
       idx++;
     }
 
-    // Side stands
+    // Side stands (wider)
     [-1,1].forEach(side=>{
-      const bx=side*5.1;
+      const bx=side*6.5;
       for(let t=0;t<TIERS;t++){
         const px=bx+side*(t*TW+TW*0.5), py=t*TH+TH+0.08;
-        for(let r=0;r<22;r++){
-          if(Math.random()<0.13) continue;
-          place(px,py,-7.4+r*0.7);
-        }
-      }
-    });
-    // End stands
-    [-1,1].forEach(side=>{
-      const bz=side*7.6;
-      for(let t=0;t<4;t++){
-        const pz=bz+side*(t*TW+TW*0.5), py=t*TH+TH+0.08;
-        for(let c=0;c<13;c++){
+        for(let r=0;r<28;r++){
           if(Math.random()<0.1) continue;
-          place(-4.0+c*0.65,py,pz);
+          place(px,py,-10.5+r*0.78);
         }
       }
     });
+    // North end stand only
+    const cbz=-9.5;
+    for(let t=0;t<4;t++){
+      const pz=cbz-(t*TW+TW*0.5), py=t*TH+TH+0.08;
+      for(let c=0;c<18;c++){
+        if(Math.random()<0.08) continue;
+        place(-6.0+c*0.72,py,pz);
+      }
+    }
 
     bIM.instanceMatrix.needsUpdate=true; hIM.instanceMatrix.needsUpdate=true;
     scene.add(bIM); scene.add(hIM);
@@ -971,7 +985,7 @@ function updateCamera(play) {
   camera.position.y += (ty - camera.position.y) * lr;
   camera.position.z += (tz - camera.position.z) * lr;
   // Look toward goal, slightly above ground
-  camera.lookAt(hp.x * 0.15, 0.3, hp.z - 5.5);
+  camera.lookAt(hp.x * 0.15, 0.3, hp.z - 7);
 }
 
 // ── MAIN LOOP ─────────────────────────────────────────────
