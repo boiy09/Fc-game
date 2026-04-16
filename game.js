@@ -5,13 +5,13 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.setClearColor(0x3a6faa);
+renderer.setClearColor(0x7ab8f5);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x3a6faa, 0.014);
+scene.fog = new THREE.FogExp2(0x7ab8f5, 0.006);
 
-const camera = new THREE.PerspectiveCamera(62, 1, 0.1, 200);
-camera.position.set(0, 8, 14);
+const camera = new THREE.PerspectiveCamera(64, 1, 0.1, 200);
+camera.position.set(0, 5, 13);
 camera.lookAt(0, 0.5, -1);
 
 function onResize() {
@@ -32,8 +32,8 @@ function to3(x2, y2) { return { x: (x2 - 210) * SC, z: (y2 - 340) * SC }; }
 const GZ = { xMin: (145-210)*SC, xMax: (275-210)*SC, z: (67-340)*SC, h: 2.5, w: 130*SC };
 
 // ── LIGHTING ─────────────────────────────────────────────
-scene.add(new THREE.AmbientLight(0xffffff, 1.15));
-const sun = new THREE.DirectionalLight(0xfffdf5, 2.0);
+scene.add(new THREE.AmbientLight(0xffffff, 1.6));
+const sun = new THREE.DirectionalLight(0xfffdf5, 2.4);
 sun.position.set(6, 14, 8);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -118,6 +118,7 @@ const G = {
 // ── 3D SCENE OBJECTS ──────────────────────────────────────
 let ballMesh, playerMeshes = [], defMeshes = [], gkMesh;
 let selRing, aimLine, aimLinePts = [], powerRing;
+let aimDotPool = [], ballGroundShadow;
 let particles = [], ptMesh;
 
 function makeMat(color, rough=0.7, metal=0.1){
@@ -128,7 +129,7 @@ function buildField() {
   // Grass base — vibrant pitch green
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(8.4, 13.6),
-    makeMat(0x1e8035, 0.92, 0)
+    makeMat(0x2a9e42, 0.88, 0)
   );
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
@@ -137,7 +138,7 @@ function buildField() {
   // Mowing stripes
   for (let i = 0; i < 10; i++) {
     if (i % 2 === 0) {
-      const s = new THREE.Mesh(new THREE.PlaneGeometry(8.4, 1.36), makeMat(0x239b3e, 0.92, 0));
+      const s = new THREE.Mesh(new THREE.PlaneGeometry(8.4, 1.36), makeMat(0x2eb84e, 0.88, 0));
       s.rotation.x = -Math.PI / 2;
       s.position.set(0, 0.001, -6.12 + i * 1.36 + 0.68);
       s.receiveShadow = true;
@@ -301,6 +302,33 @@ function makePowerRing() {
   scene.add(r); return r;
 }
 
+// Dot-trail trajectory indicator (Score!-Hero style)
+const DOT_N = 14;
+function makeAimDots() {
+  const geo = new THREE.CircleGeometry(0.09, 10);
+  for (let i = 0; i < DOT_N; i++) {
+    const m = new THREE.Mesh(geo,
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 }));
+    m.rotation.x = -Math.PI / 2;
+    m.position.y = 0.045;
+    m.visible = false;
+    scene.add(m);
+    aimDotPool.push(m);
+  }
+}
+
+// Ground shadow blob that stays at y=0 and scales with ball height
+function initBallShadow() {
+  ballGroundShadow = new THREE.Mesh(
+    new THREE.CircleGeometry(0.24, 18),
+    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0 })
+  );
+  ballGroundShadow.rotation.x = -Math.PI / 2;
+  ballGroundShadow.position.y = 0.01;
+  ballGroundShadow.visible = false;
+  scene.add(ballGroundShadow);
+}
+
 // Particle pool for goals
 function initParticles() {
   const count=80;
@@ -345,12 +373,11 @@ function onPointerDown(e) {
   if (G.screen !== 'play' || !G.play) return;
   const play = G.play;
   if (play.phase !== 'idle') return;
-  // Tap anywhere on field starts aiming from the ball holder
+  // Tap anywhere — aim starts from ball holder
   const holder = play.players[play.ballHolder];
   const hp = to3(holder.x, holder.y);
   play.phase = 'aiming';
   dragStart3 = new THREE.Vector3(hp.x, 0, hp.z);
-  aimLine.visible = true;
   powerRing.position.set(hp.x, 0.06, hp.z);
   powerRing.scale.setScalar(0.3);
   powerRing.visible = true;
@@ -360,8 +387,8 @@ function onPointerMove(e) {
   if (G.screen !== 'play' || !G.play || G.play.phase !== 'aiming') return;
   const fp = getFieldPos(e);
   if (!fp || !dragStart3) return;
-  updateAimLine(dragStart3, fp);
-  // Power ring grows and changes color with drag distance
+  updateAimDots(dragStart3, fp);
+  // Power ring scale + color
   const dx = fp.x - dragStart3.x, dz = fp.z - dragStart3.z;
   const power = clamp(Math.hypot(dx, dz) / 3.2, 0, 1);
   powerRing.scale.setScalar(0.3 + power * 2.8);
@@ -373,8 +400,8 @@ function onPointerUp(e) {
   const play = G.play;
   if (play.phase !== 'aiming') return;
   const fp = getFieldPos(e);
-  aimLine.visible = false;
   powerRing.visible = false;
+  hideAimDots();
   if (!fp || !dragStart3) { play.phase='idle'; return; }
   const dx = fp.x - dragStart3.x, dz = fp.z - dragStart3.z;
   const power3 = clamp(Math.hypot(dx,dz), 0, 3.2); // 3.2 = MAX_DRAG/50
@@ -383,23 +410,43 @@ function onPointerUp(e) {
 }
 
 function updateAimLine(from, to) {
-  const pts = [];
-  const steps = 20;
-  for (let i=0;i<=steps;i++) {
-    const t=i/steps;
+  // Keep hidden — dots are used instead
+  aimLine.visible = false;
+}
+
+function updateAimDots(from, to) {
+  const dx = to.x - from.x, dz = to.z - from.z;
+  const dist = Math.hypot(dx, dz);
+  // Clamp endpoint so dots don't extend too far
+  const maxDist = 3.5;
+  const ratio = dist > maxDist ? maxDist / dist : 1;
+  const ex = from.x + dx * ratio, ez = from.z + dz * ratio;
+
+  for (let i = 0; i < DOT_N; i++) {
+    const t = (i + 1) / (DOT_N + 1);
+    let x, z;
     if (isCurved) {
-      const cx=(from.x+to.x)/2+(to.z-from.z)*0.4;
-      const cz=(from.z+to.z)/2-(to.x-from.x)*0.4;
-      pts.push(new THREE.Vector3(
-        (1-t)*(1-t)*from.x+2*(1-t)*t*cx+t*t*to.x, 0.12,
-        (1-t)*(1-t)*from.z+2*(1-t)*t*cz+t*t*to.z
-      ));
+      const cx = (from.x + ex) / 2 + (ez - from.z) * 0.4;
+      const cz = (from.z + ez) / 2 - (ex - from.x) * 0.4;
+      const u = 1 - t;
+      x = u*u*from.x + 2*u*t*cx + t*t*ex;
+      z = u*u*from.z + 2*u*t*cz + t*t*ez;
     } else {
-      pts.push(new THREE.Vector3(from.x+(to.x-from.x)*t, 0.12, from.z+(to.z-from.z)*t));
+      x = from.x + (ex - from.x) * t;
+      z = from.z + (ez - from.z) * t;
     }
+    const dot = aimDotPool[i];
+    dot.position.set(x, 0.045, z);
+    // Dots shrink and fade toward the end
+    const scale = 1.1 - t * 0.55;
+    dot.scale.setScalar(scale);
+    dot.material.opacity = 0.95 - t * 0.5;
+    dot.visible = true;
   }
-  aimLine.geometry.setFromPoints(pts);
-  aimLine.computeLineDistances();
+}
+
+function hideAimDots() {
+  aimDotPool.forEach(d => { d.visible = false; });
 }
 
 document.getElementById('btn-curve').addEventListener('click', ()=>{
@@ -678,6 +725,16 @@ function syncActors(play, pulse) {
     ballMesh.rotation.z -= (tdx / len) * 0.18;
   }
 
+  // Dynamic ground shadow under ball
+  if (ballGroundShadow && ballMesh) {
+    ballGroundShadow.position.x = ballMesh.position.x;
+    ballGroundShadow.position.z = ballMesh.position.z;
+    const h = Math.max(0, ballMesh.position.y - 0.18);
+    ballGroundShadow.scale.setScalar(Math.max(0.25, 1 - h * 0.1));
+    ballGroundShadow.material.opacity = Math.max(0.04, 0.38 - h * 0.06);
+    ballGroundShadow.visible = (play.phase === 'flying');
+  }
+
   // Sel ring pulses around ball holder
   const hp = to3(play.players[play.ballHolder].x, play.players[play.ballHolder].y);
   selRing.position.set(hp.x, 0.04, hp.z);
@@ -779,7 +836,7 @@ document.getElementById('btn-to-select').addEventListener('click',()=>{ buildSel
 
 // ── STADIUM ───────────────────────────────────────────────
 function buildStadium() {
-  const concMat = new THREE.MeshStandardMaterial({ color: 0x8b9aad, roughness: 0.92 });
+  const concMat = new THREE.MeshStandardMaterial({ color: 0xb0bfcc, roughness: 0.88 });
   const trackMat = new THREE.MeshStandardMaterial({ color: 0xc05a2a, roughness: 0.85 });
   const roofMat = new THREE.MeshStandardMaterial({ color: 0x1a2535, roughness: 0.5, metalness: 0.4, transparent: true, opacity: 0.88, side: THREE.DoubleSide });
   const seatCols = [0x1d3f82, 0xc0392b, 0xdddddd, 0x1a5a36, 0xe6b800];
@@ -905,16 +962,16 @@ function updateCamera(play) {
   if (!play) return;
   const holder = play.players[play.ballHolder];
   const hp = to3(holder.x, holder.y);
-  // Position camera behind ball holder at low angle (Score!-Hero style)
-  const tx = hp.x * 0.4;
-  const ty = 8;
-  const tz = hp.z + 9;
-  // Smooth lerp follow
-  camera.position.x += (tx - camera.position.x) * 0.055;
-  camera.position.y += (ty - camera.position.y) * 0.055;
-  camera.position.z += (tz - camera.position.z) * 0.055;
-  // Always look toward goal area
-  camera.lookAt(hp.x * 0.15, 0.6, hp.z - 4.5);
+  // Low behind-player camera — Score!-Hero style
+  const tx = hp.x * 0.35;
+  const ty = 4.8;
+  const tz = hp.z + 7;
+  const lr = 0.06; // lerp rate
+  camera.position.x += (tx - camera.position.x) * lr;
+  camera.position.y += (ty - camera.position.y) * lr;
+  camera.position.z += (tz - camera.position.z) * lr;
+  // Look toward goal, slightly above ground
+  camera.lookAt(hp.x * 0.15, 0.3, hp.z - 5.5);
 }
 
 // ── MAIN LOOP ─────────────────────────────────────────────
@@ -922,7 +979,7 @@ function buildScene() {
   // Sky dome
   const sky = new THREE.Mesh(
     new THREE.SphereGeometry(90, 16, 16),
-    new THREE.MeshBasicMaterial({ color: 0x3a6faa, side: THREE.BackSide })
+    new THREE.MeshBasicMaterial({ color: 0x7ab8f5, side: THREE.BackSide })
   );
   scene.add(sky);
 
@@ -930,6 +987,8 @@ function buildScene() {
   selRing = makeSelRing();
   aimLine = makeAimLine();
   powerRing = makePowerRing();
+  makeAimDots();
+  initBallShadow();
   initParticles();
 }
 
@@ -944,7 +1003,7 @@ function loop(ts) {
 
   if (G.screen!=='play'||!G.play) { requestAnimationFrame(loop); return; }
   const play=G.play;
-  renderer.setClearColor(0x3a6faa); // reset flash
+  renderer.setClearColor(0x7ab8f5); // reset flash
 
   // Timer
   if(play.st.timeLimit && play.phase==='idle'){
