@@ -2,7 +2,7 @@ name: Deploy static site to GitHub Pages
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "claude/web-game-implementation-J6La5"]
   workflow_dispatch:
 
 permissions:
