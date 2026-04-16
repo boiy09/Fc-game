@@ -5,10 +5,10 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.setClearColor(0x162a4a);
+renderer.setClearColor(0x3a6faa);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x162a4a, 0.018);
+scene.fog = new THREE.FogExp2(0x3a6faa, 0.014);
 
 const camera = new THREE.PerspectiveCamera(62, 1, 0.1, 200);
 camera.position.set(0, 8, 14);
@@ -32,8 +32,8 @@ function to3(x2, y2) { return { x: (x2 - 210) * SC, z: (y2 - 340) * SC }; }
 const GZ = { xMin: (145-210)*SC, xMax: (275-210)*SC, z: (67-340)*SC, h: 2.5, w: 130*SC };
 
 // ── LIGHTING ─────────────────────────────────────────────
-scene.add(new THREE.AmbientLight(0xffffff, 0.72));
-const sun = new THREE.DirectionalLight(0xfff5e0, 1.6);
+scene.add(new THREE.AmbientLight(0xffffff, 1.15));
+const sun = new THREE.DirectionalLight(0xfffdf5, 2.0);
 sun.position.set(6, 14, 8);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -841,7 +841,7 @@ function buildStadium() {
     pole.position.set(px,6,pz); pole.castShadow=true; scene.add(pole);
     const lamp=new THREE.Mesh(new THREE.BoxGeometry(1.8,0.35,0.7),lampMat);
     lamp.position.set(px,12.2,pz); scene.add(lamp);
-    const pl=new THREE.PointLight(0xfff5e0,1.8,35);
+    const pl=new THREE.PointLight(0xfff5e0,2.8,40);
     pl.position.set(px,12,pz); scene.add(pl);
   });
 
@@ -922,7 +922,7 @@ function buildScene() {
   // Sky dome
   const sky = new THREE.Mesh(
     new THREE.SphereGeometry(90, 16, 16),
-    new THREE.MeshBasicMaterial({ color: 0x162a4a, side: THREE.BackSide })
+    new THREE.MeshBasicMaterial({ color: 0x3a6faa, side: THREE.BackSide })
   );
   scene.add(sky);
 
@@ -944,7 +944,7 @@ function loop(ts) {
 
   if (G.screen!=='play'||!G.play) { requestAnimationFrame(loop); return; }
   const play=G.play;
-  renderer.setClearColor(0x162a4a); // reset flash
+  renderer.setClearColor(0x3a6faa); // reset flash
 
   // Timer
   if(play.st.timeLimit && play.phase==='idle'){
