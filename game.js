@@ -659,22 +659,24 @@ function spawnActors() {
   ballMesh = makeBallMesh();
   const b3=to3(play.ball.x,play.ball.y); ballMesh.position.set(b3.x,0.18,b3.z); scene.add(ballMesh);
 
-  // 11v11 background players (decorative — fill formation)
-  const bgBlue = [
-    {x:148,y:578},{x:182,y:576},{x:238,y:576},{x:272,y:578}, // defenders
-    {x:152,y:518},{x:268,y:518},                               // wide mids
-    {x:182,y:545},{x:238,y:545},                               // central mids
+  // 11v11: dynamically fill remaining slots with background players
+  // Blue team: play.players already spawned → need 11 - play.players.length more
+  // Red team: play.defenders + GK already spawned → need 11 - play.defenders.length - 1 more
+  const bgBlueFull = [
+    {x:130,y:612},{x:165,y:607},{x:210,y:614},{x:255,y:607},{x:290,y:612}, // defensive line
+    {x:148,y:565},{x:183,y:560},{x:210,y:558},{x:237,y:560},{x:275,y:565}, // midfield line
   ];
-  const bgRed = [
-    {x:148,y:192},{x:182,y:188},{x:238,y:188},{x:272,y:192}, // defenders
-    {x:152,y:268},{x:268,y:268},                               // wide mids
-    {x:182,y:235},{x:238,y:235},                               // central mids
+  const bgRedFull = [
+    {x:130,y:140},{x:165,y:135},{x:210,y:138},{x:255,y:135},{x:290,y:140}, // defensive line (behind GK)
+    {x:148,y:208},{x:183,y:203},{x:210,y:200},{x:237,y:203},{x:275,y:208}, // midfield line
   ];
-  bgBlue.forEach(p=>{
+  const blueExtra = Math.max(0, 11 - play.players.length);
+  const redExtra  = Math.max(0, 11 - play.defenders.length - 1); // -1 for GK
+  bgBlueFull.slice(0, blueExtra).forEach(p=>{
     const m=makePlayerMesh(0x1d4ed8);
     const p3=to3(p.x,p.y); m.position.set(p3.x,0,p3.z); scene.add(m); bgMeshes.push(m);
   });
-  bgRed.forEach(p=>{
+  bgRedFull.slice(0, redExtra).forEach(p=>{
     const m=makePlayerMesh(0xdc2626);
     const p3=to3(p.x,p.y); m.position.set(p3.x,0,p3.z); scene.add(m); bgMeshes.push(m);
   });
