@@ -5,14 +5,14 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.setClearColor(0x0a1628);
+renderer.setClearColor(0x162a4a);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x0a1628, 0.04);
+scene.fog = new THREE.FogExp2(0x162a4a, 0.018);
 
-const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
-camera.position.set(0, 14, 20);
-camera.lookAt(0, 0, -1);
+const camera = new THREE.PerspectiveCamera(62, 1, 0.1, 200);
+camera.position.set(0, 8, 14);
+camera.lookAt(0, 0.5, -1);
 
 function onResize() {
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -32,8 +32,8 @@ function to3(x2, y2) { return { x: (x2 - 210) * SC, z: (y2 - 340) * SC }; }
 const GZ = { xMin: (145-210)*SC, xMax: (275-210)*SC, z: (67-340)*SC, h: 2.5, w: 130*SC };
 
 // ── LIGHTING ─────────────────────────────────────────────
-scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-const sun = new THREE.DirectionalLight(0xfff5e0, 1.4);
+scene.add(new THREE.AmbientLight(0xffffff, 0.72));
+const sun = new THREE.DirectionalLight(0xfff5e0, 1.6);
 sun.position.set(6, 14, 8);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -125,19 +125,19 @@ function makeMat(color, rough=0.7, metal=0.1){
 }
 
 function buildField() {
-  // Grass base
+  // Grass base — vibrant pitch green
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(8.4, 13.6),
-    makeMat(0x1a6b2f, 0.95, 0)
+    makeMat(0x1e8035, 0.92, 0)
   );
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
   scene.add(ground);
 
-  // Stripes
+  // Mowing stripes
   for (let i = 0; i < 10; i++) {
     if (i % 2 === 0) {
-      const s = new THREE.Mesh(new THREE.PlaneGeometry(8.4, 1.36), makeMat(0x1d7433, 0.95, 0));
+      const s = new THREE.Mesh(new THREE.PlaneGeometry(8.4, 1.36), makeMat(0x239b3e, 0.92, 0));
       s.rotation.x = -Math.PI / 2;
       s.position.set(0, 0.001, -6.12 + i * 1.36 + 0.68);
       s.receiveShadow = true;
@@ -900,8 +900,32 @@ function buildCrowd(TIERS,TW,TH) {
   });
 }
 
+// ── CAMERA FOLLOW ────────────────────────────────────────
+function updateCamera(play) {
+  if (!play) return;
+  const holder = play.players[play.ballHolder];
+  const hp = to3(holder.x, holder.y);
+  // Position camera behind ball holder at low angle (Score!-Hero style)
+  const tx = hp.x * 0.4;
+  const ty = 8;
+  const tz = hp.z + 9;
+  // Smooth lerp follow
+  camera.position.x += (tx - camera.position.x) * 0.055;
+  camera.position.y += (ty - camera.position.y) * 0.055;
+  camera.position.z += (tz - camera.position.z) * 0.055;
+  // Always look toward goal area
+  camera.lookAt(hp.x * 0.15, 0.6, hp.z - 4.5);
+}
+
 // ── MAIN LOOP ─────────────────────────────────────────────
 function buildScene() {
+  // Sky dome
+  const sky = new THREE.Mesh(
+    new THREE.SphereGeometry(90, 16, 16),
+    new THREE.MeshBasicMaterial({ color: 0x162a4a, side: THREE.BackSide })
+  );
+  scene.add(sky);
+
   buildField(); buildGoal(); buildStadium();
   selRing = makeSelRing();
   aimLine = makeAimLine();
@@ -920,7 +944,7 @@ function loop(ts) {
 
   if (G.screen!=='play'||!G.play) { requestAnimationFrame(loop); return; }
   const play=G.play;
-  renderer.setClearColor(0x0a1628); // reset flash
+  renderer.setClearColor(0x162a4a); // reset flash
 
   // Timer
   if(play.st.timeLimit && play.phase==='idle'){
@@ -972,6 +996,7 @@ function loop(ts) {
     }
   }
 
+  updateCamera(play);
   syncActors(play, pulse);
   requestAnimationFrame(loop);
 }
