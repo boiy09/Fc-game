@@ -2,38 +2,76 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Clutch Star - MVP</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>Clutch Star 3D: 풋볼 스토리</title>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <main class="layout">
-      <section class="hud" aria-label="게임 정보">
-        <h1>Clutch Star (MVP)</h1>
-        <div class="hud-row">
-          <span>점수: <strong id="score">0</strong></span>
-          <span>남은 시간: <strong id="time">90</strong>s</span>
-          <span>남은 체력: <strong id="hp">3</strong></span>
+    <!-- Three.js canvas -->
+    <canvas id="game"></canvas>
+
+    <!-- HUD (visible during play) -->
+    <div id="hud" class="hidden">
+      <div id="hud-left">
+        <span id="hud-title"></span>
+        <span id="hud-passes">패스: 0</span>
+      </div>
+      <div id="hud-right">
+        <span id="hud-time"></span>
+        <span id="hud-fails">실패: 0/3</span>
+      </div>
+    </div>
+    <div id="hud-goal-text"></div>
+    <button id="btn-curve">↩ 감아차기</button>
+
+    <!-- Title -->
+    <div id="screen-title" class="screen">
+      <div class="card">
+        <div class="logo-eye">⚽ CLUTCH STAR 3D</div>
+        <h1>클러치 스타</h1>
+        <p class="logo-sub">풋볼 스토리</p>
+        <button class="btn-primary" id="btn-start">탭하여 시작 ▶</button>
+        <p class="hint">드래그로 패스/슛 · 결정적 순간을 플레이하라</p>
+      </div>
+    </div>
+
+    <!-- Stage Select -->
+    <div id="screen-select" class="screen hidden">
+      <div class="card wide">
+        <h2>스테이지 선택</h2>
+        <div id="chapters-container"></div>
+        <button class="btn-sec" id="btn-select-back">← 뒤로</button>
+      </div>
+    </div>
+
+    <!-- Tactic Select -->
+    <div id="screen-tactic" class="screen hidden">
+      <div class="card">
+        <h2 id="tactic-title-el"></h2>
+        <p id="tactic-sit-el" class="dim"></p>
+        <div class="goal-card"><b>목표:</b> <span id="tactic-goal-el"></span></div>
+        <p class="section-lbl">전술 선택</p>
+        <div id="tactics-container"></div>
+        <button class="btn-primary" id="btn-play">플레이 ▶</button>
+        <button class="btn-sec" id="btn-tactic-back">← 뒤로</button>
+      </div>
+    </div>
+
+    <!-- Result -->
+    <div id="screen-result" class="screen hidden">
+      <div class="card">
+        <h2 id="result-header"></h2>
+        <div id="result-stars-el" class="stars-row"></div>
+        <p id="result-stats-el" class="dim"></p>
+        <div class="row-btns">
+          <button class="btn-sec" id="btn-retry">↺ 재도전</button>
+          <button class="btn-primary" id="btn-next">다음 ▶</button>
         </div>
-        <p class="help">
-          이동: <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> 또는 <kbd>WASD</kbd>
-          · 킥: <kbd>Space</kbd> · 재시작: <kbd>R</kbd>
-        </p>
-      </section>
+        <button class="btn-sec small" id="btn-to-select">스테이지 선택</button>
+      </div>
+    </div>
 
-      <canvas id="game" width="900" height="520" aria-label="게임 화면"></canvas>
-
-      <section class="guide" aria-label="목표 설명">
-        <h2>목표</h2>
-        <ul>
-          <li>90초 안에 최대 점수를 획득.</li>
-          <li>공을 차서 노란 타깃(골 존)에 넣으면 +10점.</li>
-          <li>빨간 수비수에게 닿으면 체력 -1.</li>
-          <li>체력 0 또는 시간 종료 시 게임 종료.</li>
-        </ul>
-      </section>
-    </main>
-
-    <script src="game.js"></script>
+    <script src="game.js?v=3"></script>
   </body>
 </html>
