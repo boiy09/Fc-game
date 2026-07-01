@@ -1,0 +1,9 @@
+# 이미지 매칭 (필수)
+numpy>=1.24
+opencv-python>=4.8        # 헤드리스 서버라면 opencv-python-headless 사용
+
+# 화면 캡처 (권장 — 없으면 pyautogui 로 대체)
+mss>=9.0
+
+# 마우스/키보드 제어 (실제 클릭·입력 실행 시 필요)
+pyautogui>=0.9.54

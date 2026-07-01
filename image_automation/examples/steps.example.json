@@ -1,0 +1,58 @@
+{
+  "_comment": "여러 단계를 순서대로 자동 실행하는 시나리오 예시. 아래 template 경로는 실제 캡처한 이미지 파일로 바꾸세요.",
+  "defaults": {
+    "confidence": 0.85,
+    "timeout": 10,
+    "interval": 0.5,
+    "grayscale": true,
+    "pause": 0.1,
+    "failsafe": true,
+    "dry_run": false,
+    "region": null
+  },
+  "steps": [
+    {
+      "name": "게임 시작 버튼 클릭",
+      "action": "click",
+      "template": "images/start_button.png",
+      "button": "left",
+      "clicks": 1
+    },
+    {
+      "name": "로딩 대기",
+      "action": "wait",
+      "seconds": 2
+    },
+    {
+      "name": "닉네임 입력창을 찾아 이름 입력",
+      "action": "type",
+      "template": "images/name_field.png",
+      "text": "ClutchStar",
+      "interval": 0.02
+    },
+    {
+      "name": "확인 후 엔터",
+      "action": "press",
+      "template": "images/name_field.png",
+      "keys": ["enter"]
+    },
+    {
+      "name": "팝업이 있으면 닫기(없어도 무시)",
+      "action": "click",
+      "template": "images/close_popup.png",
+      "optional": true
+    },
+    {
+      "name": "슛 버튼을 살짝 아래쪽으로 더블클릭",
+      "action": "click",
+      "template": "images/shoot_button.png",
+      "clicks": 2,
+      "offset": [0, 10]
+    },
+    {
+      "name": "저장 단축키",
+      "action": "hotkey",
+      "keys": ["ctrl", "s"]
+    }
+  ]
+}
