@@ -592,5 +592,120 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 1
 
 
+# --------------------------------------------------------------------------- #
+# 대화형 모드 — exe 를 더블클릭하거나 인자 없이 실행하면 메뉴가 뜬다
+# --------------------------------------------------------------------------- #
+def _ask(prompt: str, default: str = "") -> str:
+    suffix = f" [{default}]" if default else ""
+    try:
+        val = input(f"{prompt}{suffix}: ").strip()
+    except EOFError:
+        return default
+    return val or default
+
+
+def _countdown(seconds: int) -> None:
+    if seconds <= 0:
+        return
+    print(f"{seconds}초 후 실행합니다. 대상 창을 클릭해 활성화하세요...")
+    for i in range(seconds, 0, -1):
+        print(f"  {i}...", end="", flush=True)
+        time.sleep(1)
+    print(" 시작!")
+
+
+def interactive() -> int:
+    """메뉴 기반 대화형 실행(그래픽 세션 필요)."""
+    print("=" * 56)
+    print(" image_automation — 이미지 서치 자동화 (대화형 모드)")
+    print("=" * 56)
+    print("찾을 버튼/아이콘 영역을 미리 PNG 로 캡처해 두세요.\n")
+
+    while True:
+        print("\n무엇을 할까요?")
+        print("  1) 이미지 찾기 (좌표만 확인, 클릭 안 함)")
+        print("  2) 이미지 찾아 클릭")
+        print("  3) 이미지 찾아 문자열 입력")
+        print("  4) 이미지 찾아 키 입력 (예: enter)")
+        print("  5) 시나리오(JSON) 파일 실행")
+        print("  0) 종료")
+        choice = _ask("선택", "0")
+
+        try:
+            if choice == "0":
+                print("종료합니다.")
+                return 0
+
+            if choice == "5":
+                cfg = _ask("시나리오 JSON 경로", "examples/steps.example.json")
+                with open(cfg, encoding="utf-8") as f:
+                    config = json.load(f)
+                run_steps(config)
+                continue
+
+            template = _ask("찾을 이미지 파일 경로")
+            if not template:
+                print("경로가 비어 있습니다.")
+                continue
+            confidence = float(_ask("신뢰도(0~1)", "0.8"))
+            timeout = float(_ask("최대 대기 초(0=한 번만)", "5"))
+
+            # 찾기만
+            if choice == "1":
+                m = wait_for(template, timeout=timeout, confidence=confidence) if timeout > 0 \
+                    else locate_on_screen(template, confidence=confidence)
+                if m:
+                    print(f"[결과] 발견! center={m.center} conf={m.confidence:.3f}")
+                else:
+                    print("[결과] 찾지 못했습니다. 신뢰도를 낮추거나 이미지를 다시 캡처해 보세요.")
+                continue
+
+            # 실행 전 준비 시간
+            wait_before = int(float(_ask("실행 전 대기 초(창 전환용)", "3")))
+            _countdown(wait_before)
+
+            m = wait_for(template, timeout=timeout, confidence=confidence) if timeout > 0 \
+                else locate_on_screen(template, confidence=confidence)
+            if not m:
+                print("[결과] 이미지를 찾지 못했습니다. 동작을 실행하지 않습니다.")
+                continue
+            print(f"[검색] 발견 center={m.center} conf={m.confidence:.3f}")
+
+            ctrl = Controller()
+            if choice == "2":
+                clicks = int(_ask("클릭 횟수(2=더블클릭)", "1"))
+                button = _ask("버튼(left/right/middle)", "left")
+                ctrl.click(*m.center, button=button, clicks=clicks)
+            elif choice == "3":
+                text = _ask("입력할 문자열")
+                ctrl.click(*m.center)
+                ctrl.type_text(text)
+            elif choice == "4":
+                keys = _ask("누를 키(공백으로 여러 개, 예: ctrl s)", "enter").split()
+                ctrl.click(*m.center)
+                ctrl.press(keys if len(keys) > 1 else keys[0])
+            else:
+                print("알 수 없는 선택입니다.")
+        except KeyboardInterrupt:
+            print("\n취소되었습니다.")
+        except Exception as exc:  # noqa: BLE001  대화형에서는 오류로 종료하지 않고 메뉴로 복귀
+            print(f"[에러] {exc}")
+
+
+def _run_cli_or_interactive() -> int:
+    """인자가 있으면 CLI, 없으면(더블클릭 등) 대화형 모드로 진입한다."""
+    argv = sys.argv[1:]
+    if argv:
+        return main(argv)
+    code = interactive()
+    # PyInstaller 로 만든 exe 를 더블클릭한 경우, 창이 바로 닫히지 않도록 대기
+    if getattr(sys, "frozen", False):
+        try:
+            input("\n창을 닫으려면 Enter 키를 누르세요...")
+        except EOFError:
+            pass
+    return code
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(_run_cli_or_interactive())

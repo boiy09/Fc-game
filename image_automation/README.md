@@ -8,7 +8,38 @@
 
 ---
 
-## 1. 설치
+## ⚡ Windows 실행파일(.exe)로 쓰기 — Python 설치 없이
+
+Python을 몰라도 `.exe` 하나로 실행할 수 있습니다. 만드는 방법은 두 가지입니다.
+
+### 방법 A — GitHub Actions가 자동 빌드 (내 PC에 아무것도 설치 안 함) ✅ 추천
+1. 이 저장소 GitHub 페이지에서 **Actions** 탭을 엽니다.
+2. 왼쪽에서 **Build Windows EXE** 워크플로를 고르고 **Run workflow**(또는 코드가 푸시되면 자동 실행)를 누릅니다.
+3. 초록색 체크(✓)가 뜨면 그 실행 결과 페이지 맨 아래 **Artifacts → `image_automation-windows-exe`** 를 다운로드합니다.
+4. 압축을 풀면 `image_automation.exe` 가 나옵니다.
+
+### 방법 B — 내 Windows에서 직접 빌드 (Python 3.9+ 필요)
+`image_automation` 폴더 안의 **`build_exe.bat` 를 더블클릭**하면 됩니다.
+끝나면 `dist\image_automation.exe` 가 생성됩니다.
+> 수동으로 하려면: `pip install -r requirements.txt pyinstaller` 후
+> `pyinstaller --onefile --name image_automation image_automation.py`
+
+### exe 실행 방법
+- **더블클릭** → 대화형 메뉴가 뜹니다(이미지 경로·동작을 물어봄). 가장 쉽습니다.
+- **명령 프롬프트(cmd)** 에서 인자와 함께 실행:
+  ```bat
+  image_automation.exe find  -t button.png
+  image_automation.exe click -t button.png -c 0.85 --timeout 5
+  image_automation.exe type  -t name_field.png --text "홍길동"
+  image_automation.exe run   --config steps.json
+  ```
+
+> exe 안에는 Python·라이브러리가 모두 들어 있어 별도 설치가 필요 없습니다.
+> (아래 "## 1. 설치"는 Python 스크립트로 직접 돌릴 때만 필요합니다.)
+
+---
+
+## 1. 설치 (Python 스크립트로 직접 실행할 때)
 
 ```bash
 pip install -r requirements.txt
