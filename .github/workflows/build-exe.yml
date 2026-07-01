@@ -29,6 +29,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller
 
+      - name: Smoke test (imports only; app.py 는 input() 대기라 실행하지 않음)
+        run: python -c "import app, capture, matcher; print('import OK')"
+
       - name: Build exe
         run: pyinstaller --onefile --name screen-automation app.py
 

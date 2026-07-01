@@ -17,6 +17,14 @@ import cv2
 from capture import grab
 from matcher import match_one
 
+# Windows 콘솔/파이프 기본 인코딩(cp949·cp1252)은 한글을 못 담아
+# 출력 시 UnicodeEncodeError 로 죽을 수 있다. 표준 출력을 UTF-8 로 재설정해 예방.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 TEMPLATE_PATH = "template.png"
 THRESHOLD = 0.85
 
