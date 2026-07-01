@@ -46,6 +46,24 @@ except ImportError:  # pragma: no cover
     raise
 
 
+def _force_utf8_output() -> None:
+    """stdout/stderr 를 UTF-8 로 강제한다.
+
+    Windows 콘솔·CI 는 기본 인코딩이 cp1252/cp949 라서 한글 출력 시
+    UnicodeEncodeError 로 프로그램이 죽을 수 있다. errors='replace' 로
+    최악의 경우에도 크래시 없이 진행한다. (Python 3.7+ reconfigure)
+    """
+    for name in ("stdout", "stderr"):
+        stream = getattr(sys, name, None)
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+        except (AttributeError, ValueError, OSError):
+            pass  # reconfigure 불가(캡처된 스트림/None 등)면 조용히 넘어감
+
+
+_force_utf8_output()  # import 시점에 적용 → CLI·대화형·exe·테스트 모두 커버
+
+
 # region = (left, top, width, height) — 화면 일부만 탐색할 때 사용
 Region = Tuple[int, int, int, int]
 

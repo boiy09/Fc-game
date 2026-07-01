@@ -16,6 +16,9 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"          # Windows 기본 cp1252/cp949 대신 UTF-8 출력 강제
+      PYTHONIOENCODING: "utf-8"
     defaults:
       run:
         working-directory: image_automation
