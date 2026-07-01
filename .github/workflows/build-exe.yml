@@ -1,0 +1,40 @@
+name: Build Windows EXE
+
+# screen-automation-demo 를 윈도우용 .exe 로 빌드해서
+# 다운로드 가능한 아티팩트로 올린다. (리눅스에서는 윈도우 exe 를 만들 수 없어 CI 로 처리)
+
+on:
+  push:
+    branches: [ "claude/fc-online-macro-research-an5cg3" ]
+    paths: [ "screen-automation-demo/**", ".github/workflows/build-exe.yml" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: screen-automation-demo
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Build exe
+        run: pyinstaller --onefile --name screen-automation app.py
+
+      - name: Upload exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: screen-automation-exe
+          path: screen-automation-demo/dist/screen-automation.exe
+          if-no-files-found: error

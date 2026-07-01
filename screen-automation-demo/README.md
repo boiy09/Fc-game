@@ -82,6 +82,29 @@ if pos:
 - OCR + 매칭을 조합한 "특정 숫자가 될 때까지 대기" 같은 조건 로직
 - 특징점 매칭(ORB/SIFT)으로 회전·크기 변화에 강하게 만들기
 
+## 실행파일(exe)로 만들기 — Windows
+
+Python 설치 없이 더블클릭으로 쓰고 싶다면 `app.py`(통합 런처)를 exe 로 빌드합니다.
+메뉴에서 `1) 템플릿 만들기 → 2) 탐지 → 3) 탐지+클릭` 을 고르는 콘솔 프로그램이에요.
+
+**방법 A. 빌드 없이 받기 (GitHub Actions)**
+브랜치에 push 되면 `Build Windows EXE` 워크플로가 윈도우에서 자동 빌드합니다.
+GitHub → **Actions** 탭 → 최신 실행 → 하단 **Artifacts** 의
+`screen-automation-exe` 를 내려받아 압축을 풀면 `screen-automation.exe` 가 있습니다.
+
+**방법 B. 내 PC에서 직접 빌드** (Python 필요)
+```bat
+build.bat        REM 더블클릭 → dist\screen-automation.exe 생성
+```
+
+**방법 C. exe 없이 바로 실행** (Python 필요)
+```bat
+run.bat          REM 최초 1회 의존성 설치 후 app.py 실행
+```
+
+> 리눅스/CI 에서 만든 exe 는 윈도우 전용입니다. macOS/Linux 사용자는 `run.bat` 대신
+> `python app.py` 로 실행하세요.
+
 ---
 
 ### 참고
