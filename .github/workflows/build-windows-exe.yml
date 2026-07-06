@@ -8,6 +8,9 @@ on:
       - "fc-assistant/**"
       - ".github/workflows/build-windows-exe.yml"
 
+env:
+  PYTHONUTF8: "1"   # Windows 러너 콘솔(cp1252)에서 한글 출력 보장
+
 jobs:
   selftest:
     name: 핵심 로직 셀프테스트 (Linux)

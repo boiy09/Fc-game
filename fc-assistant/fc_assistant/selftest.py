@@ -52,6 +52,13 @@ def _place(screen: np.ndarray, tm: TemplateManager, name: str,
 
 
 def run_selftest() -> int:
+    # Windows 콘솔(cp1252 등)에서 한글 출력이 깨지거나 예외가 나지 않도록
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except (OSError, ValueError):
+                pass
     ok = True
 
     def check(cond: bool, label: str):
