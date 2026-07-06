@@ -89,6 +89,7 @@ class App(tk.Tk):
 
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.after(100, self._poll_events)
+        self.report_callback_exception = self._tk_error
         self._append_log(
             f"준비 완료. 템플릿 폴더: {templates_dir(self.base)}")
         self._append_log(
@@ -155,6 +156,16 @@ class App(tk.Tk):
         self.txt_log = scrolledtext.ScrolledText(
             logf, height=14, state="disabled", font=("Consolas", 9))
         self.txt_log.pack(fill="both", expand=True, padx=4, pady=4)
+
+    def _tk_error(self, exc, val, tb):
+        """GUI 콜백 예외를 로그 패널에 표시 (창 없는 exe에서도 확인 가능)."""
+        import traceback
+        msg = "".join(traceback.format_exception_only(exc, val)).strip()
+        try:
+            self._append_log(f"[GUI 오류] {msg}")
+        except tk.TclError:
+            pass
+        traceback.print_exception(exc, val, tb)
 
     def _append_log(self, line: str):
         self.txt_log.configure(state="normal")
