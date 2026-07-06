@@ -11,6 +11,9 @@ on:
 env:
   PYTHONUTF8: "1"   # Windows 러너 콘솔(cp1252)에서 한글 출력 보장
 
+permissions:
+  contents: write   # 릴리스 발행용
+
 jobs:
   selftest:
     name: 핵심 로직 셀프테스트 (Linux)
@@ -58,3 +61,22 @@ jobs:
           name: FCManagerAssistant-win64
           path: fc-assistant/dist/package/
           retention-days: 30
+      - name: Zip for release
+        shell: pwsh
+        run: Compress-Archive -Path dist/package/* -DestinationPath dist/FCManagerAssistant-win64.zip -Force
+      # 항상 같은 태그(fc-assistant-latest)의 릴리스 하나를 최신 빌드로 갱신한다.
+      # 로그인 없이 고정 URL로 다운로드 가능:
+      # https://github.com/<owner>/<repo>/releases/download/fc-assistant-latest/FCManagerAssistant-win64.zip
+      - name: Publish release (latest build)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view fc-assistant-latest 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create fc-assistant-latest `
+              --target $env:GITHUB_SHA `
+              --title "FC 감독모드 보조 도구 (최신 빌드)" `
+              --notes "자동 빌드된 Windows 실행 파일입니다. zip을 받아 압축 해제 후 FCManagerAssistant.exe를 실행하세요. 사용법은 동봉된 README.md 참고."
+          }
+          gh release upload fc-assistant-latest dist/FCManagerAssistant-win64.zip --clobber
