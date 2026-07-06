@@ -1,0 +1,181 @@
+{
+  "version": "fc_online_2026_07",
+  "comment": "UI 업데이트 시 이 파일과 PNG 템플릿만 교체하면 됩니다. 코드 수정 불필요.",
+  "default_threshold": 0.85,
+  "rois": {
+    "full": [
+      0.0,
+      0.0,
+      1.0,
+      1.0
+    ],
+    "bottom_center": [
+      0.28,
+      0.68,
+      0.44,
+      0.32
+    ],
+    "bottom_right": [
+      0.58,
+      0.66,
+      0.42,
+      0.34
+    ],
+    "top_center": [
+      0.26,
+      0.0,
+      0.48,
+      0.2
+    ],
+    "popup_center": [
+      0.18,
+      0.14,
+      0.64,
+      0.7
+    ],
+    "left_menu": [
+      0.0,
+      0.08,
+      0.26,
+      0.84
+    ]
+  },
+  "templates": {
+    "btn_start": {
+      "roi": "bottom_right",
+      "desc": "감독모드 경기 시작 버튼"
+    },
+    "btn_confirm": {
+      "roi": "bottom_center",
+      "desc": "확인/다음 버튼"
+    },
+    "btn_close": {
+      "roi": "popup_center",
+      "desc": "팝업 닫기 버튼"
+    },
+    "state_lobby": {
+      "roi": "left_menu",
+      "desc": "감독모드 로비 고유 UI"
+    },
+    "state_matching": {
+      "roi": "full",
+      "desc": "매칭/로딩 화면 고유 UI"
+    },
+    "state_scoreboard": {
+      "roi": "top_center",
+      "desc": "경기 중 스코어보드"
+    },
+    "state_match_time": {
+      "roi": "top_center",
+      "desc": "경기 중 시간 표시"
+    },
+    "state_result": {
+      "roi": "top_center",
+      "desc": "경기 결과 화면 타이틀"
+    },
+    "popup_reward": {
+      "roi": "popup_center",
+      "desc": "보상 팝업 프레임"
+    },
+    "popup_error": {
+      "roi": "popup_center",
+      "desc": "오류/점검/네트워크 팝업 프레임"
+    }
+  },
+  "states": [
+    {
+      "id": "ERROR",
+      "name": "오류 팝업",
+      "priority": 10,
+      "evidence": [
+        "popup_error"
+      ],
+      "min_evidence": 1,
+      "action": {
+        "type": "error"
+      }
+    },
+    {
+      "id": "REWARD",
+      "name": "보상/알림 팝업",
+      "priority": 20,
+      "evidence": [
+        "popup_reward",
+        "btn_confirm",
+        "btn_close"
+      ],
+      "min_evidence": 2,
+      "action": {
+        "type": "click",
+        "targets": [
+          "btn_confirm",
+          "btn_close"
+        ],
+        "confirm_scans": 2
+      }
+    },
+    {
+      "id": "RESULT",
+      "name": "경기 종료(결과)",
+      "priority": 30,
+      "evidence": [
+        "state_result",
+        "btn_confirm"
+      ],
+      "min_evidence": 2,
+      "forbid": [
+        "state_scoreboard"
+      ],
+      "action": {
+        "type": "click",
+        "targets": [
+          "btn_confirm"
+        ],
+        "confirm_scans": 2,
+        "count_loop": true
+      }
+    },
+    {
+      "id": "IN_GAME",
+      "name": "경기 진행 중",
+      "priority": 40,
+      "evidence": [
+        "state_scoreboard",
+        "state_match_time"
+      ],
+      "min_evidence": 1,
+      "action": {
+        "type": "wait"
+      }
+    },
+    {
+      "id": "MATCHING",
+      "name": "매칭/로딩 중",
+      "priority": 50,
+      "evidence": [
+        "state_matching"
+      ],
+      "min_evidence": 1,
+      "action": {
+        "type": "wait"
+      }
+    },
+    {
+      "id": "LOBBY",
+      "name": "감독모드 로비",
+      "priority": 60,
+      "evidence": [
+        "state_lobby",
+        "btn_start"
+      ],
+      "min_evidence": 2,
+      "action": {
+        "type": "click",
+        "targets": [
+          "btn_start"
+        ],
+        "confirm_scans": 2
+      }
+    }
+  ]
+}

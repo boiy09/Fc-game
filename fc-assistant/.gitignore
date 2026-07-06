@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.venv/
+build/
+dist/
+logs/
+config/user_config.json
+templates/*/_backup/

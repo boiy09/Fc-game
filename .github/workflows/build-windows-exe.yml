@@ -1,0 +1,57 @@
+name: Build FC Assistant Windows EXE
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, "claude/**" ]
+    paths:
+      - "fc-assistant/**"
+      - ".github/workflows/build-windows-exe.yml"
+
+jobs:
+  selftest:
+    name: 핵심 로직 셀프테스트 (Linux)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: fc-assistant
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install minimal deps
+        run: pip install -r requirements-ci.txt
+      - name: Run selftest
+        run: python -m fc_assistant.selftest
+
+  build-exe:
+    name: Windows exe 빌드
+    needs: selftest
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: fc-assistant
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install deps
+        run: pip install -r requirements.txt pyinstaller
+      - name: Selftest (Windows)
+        run: python -m fc_assistant --selftest
+      - name: Build exe
+        run: pyinstaller --clean --noconfirm packaging/fc_assistant.spec
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/package | Out-Null
+          Copy-Item dist/FCManagerAssistant.exe dist/package/
+          Copy-Item README.md dist/package/README.md
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FCManagerAssistant-win64
+          path: fc-assistant/dist/package/
+          retention-days: 30

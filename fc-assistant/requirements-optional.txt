@@ -1,0 +1,2 @@
+# OCR 보조 기능 사용 시 (Tesseract 엔진 별도 설치 필요)
+pytesseract>=0.3.13

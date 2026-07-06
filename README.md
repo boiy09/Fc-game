@@ -1,5 +1,8 @@
 # Clutch Star MVP
 
+> 📌 **FC온라인 감독모드 이미지 인식 보조 도구**는 [`fc-assistant/`](fc-assistant/README.md) 폴더에 있습니다.
+> Windows exe는 GitHub **Actions** 탭의 `Build FC Assistant Windows EXE` 실행 결과(Artifacts)에서 내려받을 수 있습니다.
+
 ## 바로 플레이(배포 링크)
 GitHub Pages 배포가 완료되면 아래 형식으로 접속:
 

@@ -1,0 +1,3 @@
+# 셀프테스트(헤드리스)용 최소 의존성
+numpy>=1.26,<3
+opencv-python-headless>=4.9,<5
