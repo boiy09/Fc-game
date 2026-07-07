@@ -1,17 +1,26 @@
 # DOOMVIVOR — 둠 × 뱀서
 
 레이캐스팅 1인칭 슈터에 **뱀파이어 서바이벌식 호드 + 로그라이트 성장**을 얹은 웹 게임.
-외부 라이브러리 없이 순수 HTML5 Canvas + Vanilla JS로 동작합니다. (파일 3개)
+외부 라이브러리 없이 순수 HTML5 Canvas + Vanilla JS로 동작하며, **단일 HTML 파일**로도 배포됩니다.
 
 > 쉬지 말고 몰아쳐라 — 연속 처치(콤보)가 곧 힘이다.
 
 ## 플레이
 
-로컬 서버로 열거나(권장) `index.html`을 브라우저로 바로 엽니다.
+**가장 쉬운 방법 — 단독 HTML 파일:** [`dist/doomvivor.html`](dist/doomvivor.html) **한 개**를 브라우저로 열면 끝.
+CSS·JS·폰트·텍스처가 전부 그 파일 안에 임베드돼 있어 **서버도, 다른 파일도, 인터넷도 필요 없습니다**(외부 요청 0).
+
+개발용 멀티 파일로 실행하려면(에셋이 상대경로라 로컬 서버 권장):
 
 ```bash
 python -m http.server 8000
 # http://localhost:8000
+```
+
+단독 파일 재생성:
+
+```bash
+node scripts/build-standalone.js   # → dist/doomvivor.html
 ```
 
 마우스 조준(포인터 락)을 쓰므로 화면을 한 번 클릭해 시작하세요.

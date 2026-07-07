@@ -194,8 +194,10 @@ function loadImage(name, src){
   img.src = src;
 }
 function loadAssets(){
-  loadImage('wallDark', 'assets/textures/wall_dark.png');   // grid==1
-  loadImage('wallRed',  'assets/textures/wall_red.png');    // grid==2
+  // 단일 HTML 빌드 시 window.__DOOMVIVOR_ASSETS(data URI)로 임베드 → 서버 없이 동작
+  const emb = (typeof window !== 'undefined' && window.__DOOMVIVOR_ASSETS) || {};
+  loadImage('wallDark', emb.wallDark || 'assets/textures/wall_dark.png');   // grid==1
+  loadImage('wallRed',  emb.wallRed  || 'assets/textures/wall_red.png');    // grid==2
 }
 const WALL_TEX = { 1: 'wallDark', 2: 'wallRed' };
 // 폴백용 벽 기본색
@@ -320,6 +322,7 @@ function spawnEnemy(){
     enemies.push({
       kind:key, x, y, hp:t.hp, maxHp:t.hp, atk:0, hitFlash:0,
       sprite:SPR[key], size:t.size, vOffset:t.vOff, t,
+      phase: Math.random() * 6.283,   // 애니메이션 위상
     });
     return;
   }
@@ -607,15 +610,22 @@ function render(){
     const sizeUnit = Math.abs(H / tY);
     const spriteH = sizeUnit * (s.size || 1);
     const spriteW = spriteH * ((s.sprite.width) / (s.sprite.height));
-    const vMove = spriteH * (s.vOffset || 0);
+    let vOff = s.vOffset || 0, swayX = 0;
+    if (s.kind){                                          // 적: 걷는 바운스 애니메이션
+      const b = Math.sin(game.time * 6 + s.phase);
+      vOff -= 0.045 * Math.abs(b);                        // 위로 통통
+      swayX = b * spriteW * 0.05;                         // 좌우 살짝
+    }
+    const vMove = spriteH * vOff;
     const y0 = horizon - spriteH / 2 + vMove;
-    const startX = Math.floor(screenX - spriteW / 2);
-    const endX = Math.ceil(screenX + spriteW / 2);
+    const cx = screenX + swayX;
+    const startX = Math.floor(cx - spriteW / 2);
+    const endX = Math.ceil(cx + spriteW / 2);
     const img = s.sprite, iw = img.width, ih = img.height;
     for (let x = startX; x < endX; x++){
       if (x < 0 || x >= W) continue;
       if (tY >= zBuffer[x]) continue;                     // 벽 뒤 가림
-      const texX = ((x - (screenX - spriteW / 2)) / spriteW * iw) | 0;
+      const texX = ((x - (cx - spriteW / 2)) / spriteW * iw) | 0;
       if (texX < 0 || texX >= iw) continue;
       ctx.drawImage(img, texX, 0, 1, ih, x, y0, 1, spriteH);
     }
