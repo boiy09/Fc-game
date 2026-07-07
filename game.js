@@ -27,7 +27,7 @@ const CFG = {
 };
 
 // ------------------------------------------------------------------
-// MAP — '#' 벽, '.' 바닥, 'P' 플레이어 시작
+// MAP — '#' 다크 벽(1), '2' 레드 지옥벽(2), '.' 바닥, 'P' 플레이어 시작
 // ------------------------------------------------------------------
 const MAP_STR = [
   "########################",
@@ -40,10 +40,10 @@ const MAP_STR = [
   "#..........P...........#",
   "#......................#",
   "#..##..............##..#",
-  "#..##......##......##..#",
-  "#..........##..........#",
+  "#..##......22......##..#",
+  "#..........22..........#",
   "#......................#",
-  "#..##......##......##..#",
+  "#..##......22......##..#",
   "#..##..............##..#",
   "#......................#",
   "#.....##......##.......#",
@@ -62,6 +62,7 @@ function parseMap(rows){
     for (let x = 0; x < MAP_W; x++){
       const c = rows[y][x];
       if (c === '#') r.push(1);
+      else if (c === '2') r.push(2);
       else { r.push(0); if (c === 'P'){ spawn.x = x + 0.5; spawn.y = y + 0.5; } }
     }
     grid.push(r);
@@ -69,7 +70,7 @@ function parseMap(rows){
 }
 function isWall(x, y){
   if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return true;
-  return grid[y | 0][x | 0] === 1;
+  return grid[y | 0][x | 0] > 0;
 }
 function collides(px, py, r){
   return isWall(px - r, py - r) || isWall(px + r, py - r) ||
@@ -180,6 +181,25 @@ function buildSprites(){
     g.fillStyle = rg; g.beginPath(); g.arc(16,16,15,0,7); g.fill();
   });
 }
+
+// ------------------------------------------------------------------
+// IMAGE ASSETS (외부 CC0 텍스처) — 로드 실패 시 solid-color로 자동 폴백
+//   assets/textures/*  ·  Kenney Prototype Textures (CC0 1.0)
+// ------------------------------------------------------------------
+const ASSETS = {};
+function loadImage(name, src){
+  const img = new Image();
+  img.onload = () => { ASSETS[name] = img; };
+  img.onerror = () => { /* 폴백: 텍스처 없이 solid-color 벽 사용 */ };
+  img.src = src;
+}
+function loadAssets(){
+  loadImage('wallDark', 'assets/textures/wall_dark.png');   // grid==1
+  loadImage('wallRed',  'assets/textures/wall_red.png');    // grid==2
+}
+const WALL_TEX = { 1: 'wallDark', 2: 'wallRed' };
+// 폴백용 벽 기본색
+const WALL_RGB = { 1: [150, 92, 78], 2: [176, 40, 40] };
 
 // ------------------------------------------------------------------
 // STATE
@@ -540,20 +560,35 @@ function render(){
       if (sDX < sDY){ sDX += dDX; mapX += stepX; side = 0; }
       else { sDY += dDY; mapY += stepY; side = 1; }
       if (mapX < 0 || mapY < 0 || mapX >= MAP_W || mapY >= MAP_H){ hit = 1; break; }
-      if (grid[mapY][mapX] === 1) hit = 1;
+      if (grid[mapY][mapX] > 0) hit = 1;
     }
     let perp = side === 0 ? (sDX - dDX) : (sDY - dDY);
     if (perp < 0.02) perp = 0.02;
     const lineH = H / perp;
     const y0 = horizon - lineH / 2;
 
-    // 벽 색: 거리 안개 + 면 방향 음영 + 타일 격자
+    // 벽 종류 + 거리 안개 + 면 방향 음영
+    const wallVal = (mapY >= 0 && mapY < MAP_H && mapX >= 0 && mapX < MAP_W) ? grid[mapY][mapX] : 1;
     let bright = Math.max(0.12, 1 - perp / CFG.maxViewDist);
     if (side === 1) bright *= 0.72;
-    if (((mapX + mapY) & 1) === 0) bright *= 0.9;
-    const rC = (150 * bright) | 0, gC = (92 * bright) | 0, bC = (78 * bright) | 0;
-    ctx.fillStyle = `rgb(${rC},${gC},${bC})`;
-    ctx.fillRect(x, y0, CFG.colStep, lineH);
+
+    const tex = ASSETS[WALL_TEX[wallVal]];
+    if (tex){
+      // 텍스처 매핑: 광선이 벽에 맞은 정확한 위치 → 텍스처 컬럼
+      let wallX = side === 0 ? (player.y + perp * rayY) : (player.x + perp * rayX);
+      wallX -= Math.floor(wallX);
+      let texX = (wallX * tex.width) | 0;
+      if (texX >= tex.width) texX = tex.width - 1;
+      ctx.drawImage(tex, texX, 0, 1, tex.height, x, y0, CFG.colStep, lineH);
+      const dark = Math.min(0.85, 1 - bright);            // 안개(검정 오버레이)
+      if (dark > 0.01){ ctx.fillStyle = `rgba(0,0,0,${dark})`; ctx.fillRect(x, y0, CFG.colStep, lineH); }
+    } else {
+      // 폴백: 텍스처 미로드 시 solid-color 벽
+      if (((mapX + mapY) & 1) === 0) bright *= 0.9;
+      const c = WALL_RGB[wallVal] || WALL_RGB[1];
+      ctx.fillStyle = `rgb(${(c[0]*bright)|0},${(c[1]*bright)|0},${(c[2]*bright)|0})`;
+      ctx.fillRect(x, y0, CFG.colStep, lineH);
+    }
 
     for (let c = 0; c < CFG.colStep && x + c < W; c++) zBuffer[x + c] = perp;
   }
@@ -796,6 +831,7 @@ function frame(now){
 // ------------------------------------------------------------------
 parseMap(MAP_STR);
 buildSprites();
+loadAssets();          // 외부 CC0 텍스처 비동기 로드 (실패해도 폴백으로 동작)
 resize();
 resetState();
 game.mode = 'menu';
@@ -807,6 +843,7 @@ window.DOOMVIVOR = {
   get enemies(){ return enemies; },
   get projectiles(){ return projectiles; },
   get particles(){ return particles; },
+  get ASSETS(){ return ASSETS; },
 };
 
 })();
