@@ -1,77 +1,71 @@
-<!doctype html>
-<html lang="ko">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-    <title>Clutch Star 3D: 풋볼 스토리</title>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-    <link rel="stylesheet" href="style.css" />
-  </head>
-  <body>
-    <!-- Three.js canvas -->
-    <canvas id="game"></canvas>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>DOOMVIVOR — 둠 × 뱀서</title>
+<link rel="stylesheet" href="style.css" />
 
-    <!-- HUD (visible during play) -->
-    <div id="hud" class="hidden">
-      <div id="hud-left">
-        <span id="hud-title"></span>
-        <span id="hud-passes">패스: 0</span>
-      </div>
-      <div id="hud-right">
-        <span id="hud-time"></span>
-        <span id="hud-fails">실패: 0/3</span>
-      </div>
-    </div>
-    <div id="hud-goal-text"></div>
-    <button id="btn-curve">↩ 감아차기</button>
+<div id="game">
+  <canvas id="view"></canvas>
 
-    <!-- Title -->
-    <div id="screen-title" class="screen">
-      <div class="card">
-        <div class="logo-eye">⚽ CLUTCH STAR 3D</div>
-        <h1>클러치 스타</h1>
-        <p class="logo-sub">풋볼 스토리</p>
-        <button class="btn-primary" id="btn-start">탭하여 시작 ▶</button>
-        <p class="hint">드래그로 패스/슛 · 결정적 순간을 플레이하라</p>
-      </div>
+  <!-- ===== In-game HUD ===== -->
+  <div id="hud" class="hidden">
+    <div id="topbar">
+      <div class="stat"><span class="label">WAVE</span><span id="wave">1</span></div>
+      <div class="stat"><span class="label">TIME</span><span id="time">0:00</span></div>
+      <div class="stat"><span class="label">KILLS</span><span id="kills">0</span></div>
+      <div class="stat"><span class="label">SCORE</span><span id="score">0</span></div>
     </div>
 
-    <!-- Stage Select -->
-    <div id="screen-select" class="screen hidden">
-      <div class="card wide">
-        <h2>스테이지 선택</h2>
-        <div id="chapters-container"></div>
-        <button class="btn-sec" id="btn-select-back">← 뒤로</button>
-      </div>
+    <div id="combo" class="hidden">
+      <span id="comboRank">D</span>
+      <span id="comboMul">x1.0</span>
+      <div id="comboBarWrap"><div id="comboBar"></div></div>
     </div>
 
-    <!-- Tactic Select -->
-    <div id="screen-tactic" class="screen hidden">
-      <div class="card">
-        <h2 id="tactic-title-el"></h2>
-        <p id="tactic-sit-el" class="dim"></p>
-        <div class="goal-card"><b>목표:</b> <span id="tactic-goal-el"></span></div>
-        <p class="section-lbl">전술 선택</p>
-        <div id="tactics-container"></div>
-        <button class="btn-primary" id="btn-play">플레이 ▶</button>
-        <button class="btn-sec" id="btn-tactic-back">← 뒤로</button>
+    <div id="bottombar">
+      <div class="meter">
+        <div class="meterLabel">HP</div>
+        <div class="bar"><div id="hpBar"></div><span id="hpText">100</span></div>
+      </div>
+      <div class="meter">
+        <div class="meterLabel">LV <span id="level">1</span></div>
+        <div class="bar xp"><div id="xpBar"></div></div>
       </div>
     </div>
+  </div>
 
-    <!-- Result -->
-    <div id="screen-result" class="screen hidden">
-      <div class="card">
-        <h2 id="result-header"></h2>
-        <div id="result-stars-el" class="stars-row"></div>
-        <p id="result-stats-el" class="dim"></p>
-        <div class="row-btns">
-          <button class="btn-sec" id="btn-retry">↺ 재도전</button>
-          <button class="btn-primary" id="btn-next">다음 ▶</button>
-        </div>
-        <button class="btn-sec small" id="btn-to-select">스테이지 선택</button>
-      </div>
+  <!-- ===== Start screen ===== -->
+  <div id="startScreen" class="overlay">
+    <h1 class="logo">DOOM<span>VIVOR</span></h1>
+    <p class="tag">둠 × 뱀서 · 1인칭 호드 서바이벌</p>
+    <div class="controls">
+      <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 이동 / 스트레이프</div>
+      <div><kbd>MOUSE</kbd> 조준 &nbsp;·&nbsp; <kbd>CLICK</kbd> 사격(홀드 가능)</div>
+      <div><kbd>SHIFT</kbd> 질주 &nbsp;·&nbsp; <kbd>ESC</kbd> 일시정지</div>
     </div>
+    <button id="startBtn" class="btn">클릭해서 시작</button>
+    <p class="hint">쉬지 말고 몰아쳐라 — 연속 처치가 곧 힘이다.</p>
+  </div>
 
-    <script src="game.js?v=3"></script>
-  </body>
-</html>
+  <!-- ===== Level up ===== -->
+  <div id="levelScreen" class="overlay hidden">
+    <h2 class="lv">LEVEL UP</h2>
+    <p class="sub">업그레이드 하나를 선택하세요</p>
+    <div id="cards"></div>
+  </div>
+
+  <!-- ===== Pause ===== -->
+  <div id="pauseScreen" class="overlay hidden">
+    <h2>일시정지</h2>
+    <button id="resumeBtn" class="btn">계속하기</button>
+    <p class="hint">ESC 로 언제든 멈출 수 있어요.</p>
+  </div>
+
+  <!-- ===== Game over ===== -->
+  <div id="overScreen" class="overlay hidden">
+    <h1 class="dead">YOU DIED</h1>
+    <div id="overStats"></div>
+    <button id="restartBtn" class="btn">다시 시작 <kbd>R</kbd></button>
+  </div>
+</div>
+
+<script src="game.js"></script>

@@ -1,1078 +1,812 @@
+/* ============================================================
+   DOOMVIVOR — 둠 × 뱀서 (raycaster + survivor roguelite)
+   Single-file skeleton. Tweak CFG / UPGRADES / TYPES / MAP freely.
+   ============================================================ */
 'use strict';
-// ── THREE.JS INIT ─────────────────────────────────────────
-const canvas = document.getElementById('game');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.setClearColor(0x7ab8f5);
+(() => {
 
-const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x7ab8f5, 0.006);
-
-const camera = new THREE.PerspectiveCamera(64, 1, 0.1, 200);
-camera.position.set(0, 5, 13);
-camera.lookAt(0, 0.5, -1);
-
-function onResize() {
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-}
-window.addEventListener('resize', onResize);
-onResize();
-
-// ── COORDINATE MAPPING ────────────────────────────────────
-// 2D canvas: 420×680, 3D field: centred at origin
-// Scale: divide by 50 → field ≈ 8.4 × 13.6 units
-const SC = 1 / 50;
-function to3(x2, y2) { return { x: (x2 - 210) * SC, z: (y2 - 340) * SC }; }
-
-// GOAL zone in 2D: x 145→275, y 48→86  →  3D z ≈ -5.84
-const GZ = { xMin: (145-210)*SC, xMax: (275-210)*SC, z: (67-340)*SC, h: 2.5, w: 130*SC };
-
-// ── LIGHTING ─────────────────────────────────────────────
-scene.add(new THREE.AmbientLight(0xffffff, 1.6));
-const sun = new THREE.DirectionalLight(0xfffdf5, 2.4);
-sun.position.set(6, 14, 8);
-sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-Object.assign(sun.shadow.camera, { left: -20, right: 20, top: 24, bottom: -24, near: 0.1, far: 80 });
-scene.add(sun);
-const fill = new THREE.DirectionalLight(0x4488ff, 0.25);
-fill.position.set(-6, 8, -6);
-scene.add(fill);
-
-// ── STAGE DATA ────────────────────────────────────────────
-const CHAPTERS = [
-  {
-    id: 1, name: '챕터 1: 무명 신인의 데뷔',
-    stages: [
-      { id:0, title:'첫 슛', situation:'88분·0:0·마지막 공격 기회', goal:'골을 넣어라!', type:'score',
-        players:[{id:0,x:210,y:480,name:'나'}], defenders:[], gk:{x:210,y:110},
-        calcStars:(r)=> r.scored?(r.maxPower>=120?3:2):0 },
-      { id:1, title:'첫 어시스트', situation:'75분·0:0·측면 공격', goal:'동료에게 패스 후 골!', type:'pass_then_score', minPasses:1,
-        players:[{id:0,x:120,y:460,name:'나'},{id:1,x:300,y:330,name:'윤성'}],
-        defenders:[{id:0,x:210,y:360,speed:2.5}], gk:{x:210,y:110},
-        calcStars:(r)=> r.scored?(r.passes>=1?3:1):0 },
-      { id:2, title:'세 번의 패스', situation:'82분·1:2·역전의 기회', goal:'3번 패스 후 골!', type:'combo', minPasses:2,
-        players:[{id:0,x:100,y:500,name:'나'},{id:1,x:290,y:390,name:'윤성'},{id:2,x:210,y:290,name:'박준'}],
-        defenders:[{id:0,x:180,y:440,speed:2.8},{id:1,x:320,y:340,speed:2.5}], gk:{x:210,y:110},
-        calcStars:(r)=> r.scored?(r.passes>=3?3:r.passes>=2?2:1):0 },
-      { id:3, title:'감아차기', situation:'90분·0:1·프리킥!', goal:'감아차기로 골!', type:'curve', mustCurve:true,
-        players:[{id:0,x:155,y:440,name:'나'}],
-        defenders:[{id:0,x:195,y:360,speed:0,isWall:true},{id:1,x:220,y:360,speed:0,isWall:true},{id:2,x:245,y:360,speed:0,isWall:true}],
-        gk:{x:270,y:110}, calcStars:(r)=> r.scored?(r.curved?3:1):0 },
-      { id:4, title:'시간과의 싸움', situation:'94분·0:1·마지막 공격!', goal:'8초 안에 골!', type:'timed', timeLimit:8,
-        players:[{id:0,x:210,y:460,name:'나'},{id:1,x:330,y:350,name:'윤성'}],
-        defenders:[{id:0,x:250,y:370,speed:3},{id:1,x:165,y:300,speed:2.8}], gk:{x:210,y:110},
-        calcStars:(r)=> r.scored?(r.timeLeft>=4?3:2):0 },
-    ],
-  },
-  {
-    id: 2, name: '챕터 2: 주전 경쟁',
-    stages: [
-      { id:5, title:'경쟁자', situation:'70분·0:0·돌파 찬스', goal:'수비수를 피해 골!', type:'score',
-        players:[{id:0,x:210,y:500,name:'나'}],
-        defenders:[{id:0,x:165,y:380,speed:3.2},{id:1,x:255,y:380,speed:3.2}], gk:{x:210,y:110},
-        calcStars:(r)=> r.scored?(r.actions<=1?3:2):0 },
-      { id:6, title:'역습', situation:'55분·0:1·카운터 어택!', goal:'2패스 이상 연결 후 득점!', type:'combo', minPasses:1,
-        players:[{id:0,x:80,y:520,name:'나'},{id:1,x:340,y:380,name:'정민'},{id:2,x:200,y:290,name:'윤성'}],
-        defenders:[{id:0,x:225,y:440,speed:3},{id:1,x:285,y:330,speed:3}], gk:{x:210,y:110},
-        calcStars:(r)=> r.scored?(r.passes>=3?3:r.passes>=2?2:1):0 },
-      { id:7, title:'패널티 킥', situation:'87분·1:1·페널티 킥!', goal:'골키퍼를 속여라!', type:'penalty',
-        players:[{id:0,x:210,y:360,name:'나'}], defenders:[], gk:{x:210,y:110,isAlert:true,speed:5},
-        calcStars:(r)=> r.scored?(r.cornerShot?3:2):0 },
-      { id:8, title:'세트피스', situation:'89분·0:1·코너킥!', goal:'코너킥으로 동점골!', type:'combo', minPasses:1,
-        players:[{id:0,x:390,y:560,name:'나'},{id:1,x:210,y:280,name:'윤성'},{id:2,x:285,y:240,name:'박준'}],
-        defenders:[{id:0,x:180,y:270,speed:2.8},{id:1,x:250,y:255,speed:2.8}], gk:{x:210,y:110},
-        calcStars:(r)=> r.scored?(r.passes>=2?3:2):0 },
-      { id:9, title:'클러치 모먼트', situation:'90+3분·1:2·최후의 역전!', goal:'3패스 이상 후 역전골!', type:'combo', minPasses:3, timeLimit:15,
-        players:[{id:0,x:210,y:530,name:'나'},{id:1,x:340,y:400,name:'윤성'},{id:2,x:95,y:380,name:'정민'},{id:3,x:265,y:280,name:'박준'}],
-        defenders:[{id:0,x:285,y:450,speed:3.2},{id:1,x:140,y:375,speed:3},{id:2,x:225,y:300,speed:3.5}], gk:{x:210,y:110},
-        calcStars:(r)=> r.scored?(r.passes>=4?3:r.passes>=3?2:1):0 },
-    ],
-  },
-];
-
-// ── SAVE ─────────────────────────────────────────────────
-function loadSave(){ try{ return JSON.parse(localStorage.getItem('cs3d')||'null'); }catch{ return null; } }
-function doSave(){ localStorage.setItem('cs3d', JSON.stringify({ stars: G.stars })); }
-
-// ── TACTICS ──────────────────────────────────────────────
-const TACTICS = [
-  { name:'침투 우선', icon:'▶▶', desc:'수비 속도 -20%\n패스 범위 +10px' },
-  { name:'측면 전개', icon:'↔',  desc:'슛 각도 보너스\n짧은 패스 정확도 ↑' },
-  { name:'원투 패스', icon:'↩',  desc:'패스 후 빠른 연결\n패스 속도 +20%' },
-];
-
-// ── GLOBAL STATE ─────────────────────────────────────────
-const sv = loadSave();
-const G = {
-  screen: 'title',
-  chapter: 0, stage: 0, tactic: 0,
-  stars: sv ? sv.stars : Array(10).fill(0),
-  play: null, result: null,
+// ------------------------------------------------------------------
+// CONFIG — 대부분의 밸런스는 여기서 조절
+// ------------------------------------------------------------------
+const CFG = {
+  fov: 0.66,            // camera plane length (~66° 시야)
+  renderScale: 0.5,     // 내부 렌더 해상도 배율 (낮을수록 레트로+빠름)
+  colStep: 1,           // 벽 레이 컬럼 폭(px)
+  moveSpeed: 3.1,       // tiles/sec
+  sprintMul: 1.55,
+  turnSpeed: 0.0023,    // 마우스 감도 (rad/px)
+  playerRadius: 0.22,
+  maxHp: 100,
+  fireCooldown: 0.26,   // sec
+  bulletDamage: 26,
+  comboWindow: 3.2,     // 콤보 유지 시간(sec)
+  comboDmgPer: 0.02,    // 콤보 1당 데미지 +2% (최대 20콤보 반영)
+  xpBase: 6,
+  xpGrowth: 1.30,
+  maxViewDist: 18,      // 안개 거리
 };
 
-// ── 3D SCENE OBJECTS ──────────────────────────────────────
-let ballMesh, playerMeshes = [], defMeshes = [], gkMesh, bgMeshes = [];
-let selRing, aimLine, aimLinePts = [], powerRing;
-let aimDotPool = [], ballGroundShadow;
-let particles = [], ptMesh;
-
-function makeMat(color, rough=0.7, metal=0.1){
-  return new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal });
-}
-
-function buildField() {
-  // Grass base — vibrant pitch green (larger than line markings for realistic apron)
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(16, 22),
-    makeMat(0x2a9e42, 0.88, 0)
-  );
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
-  scene.add(ground);
-
-  // Mowing stripes across full grass area
-  for (let i = 0; i < 11; i++) {
-    if (i % 2 === 0) {
-      const s = new THREE.Mesh(new THREE.PlaneGeometry(16, 2), makeMat(0x2eb84e, 0.88, 0));
-      s.rotation.x = -Math.PI / 2;
-      s.position.set(0, 0.001, -10 + i * 2 + 1);
-      s.receiveShadow = true;
-      scene.add(s);
+// ------------------------------------------------------------------
+// MAP — '#' 벽, '.' 바닥, 'P' 플레이어 시작
+// ------------------------------------------------------------------
+const MAP_STR = [
+  "########################",
+  "#......................#",
+  "#..####..........####..#",
+  "#..#................#..#",
+  "#..#..##......##....#..#",
+  "#.....##......##.......#",
+  "#......................#",
+  "#..........P...........#",
+  "#......................#",
+  "#..##..............##..#",
+  "#..##......##......##..#",
+  "#..........##..........#",
+  "#......................#",
+  "#..##......##......##..#",
+  "#..##..............##..#",
+  "#......................#",
+  "#.....##......##.......#",
+  "#..#..##......##....#..#",
+  "#..#................#..#",
+  "#..####..........####..#",
+  "#......................#",
+  "########################",
+];
+let MAP_W = 0, MAP_H = 0, grid = [];
+const spawn = { x: 11.5, y: 7.5 };
+function parseMap(rows){
+  MAP_H = rows.length; MAP_W = rows[0].length; grid = [];
+  for (let y = 0; y < MAP_H; y++){
+    const r = [];
+    for (let x = 0; x < MAP_W; x++){
+      const c = rows[y][x];
+      if (c === '#') r.push(1);
+      else { r.push(0); if (c === 'P'){ spawn.x = x + 0.5; spawn.y = y + 0.5; } }
     }
+    grid.push(r);
   }
-
-  // White lines helper
-  const lm = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 });
-  function line(...pts) {
-    const geo = new THREE.BufferGeometry().setFromPoints(pts.map(([x,z])=> new THREE.Vector3(x,0.005,z)));
-    scene.add(new THREE.Line(geo, lm));
+}
+function isWall(x, y){
+  if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) return true;
+  return grid[y | 0][x | 0] === 1;
+}
+function collides(px, py, r){
+  return isWall(px - r, py - r) || isWall(px + r, py - r) ||
+         isWall(px - r, py + r) || isWall(px + r, py + r);
+}
+function lineOfSight(ax, ay, bx, by){
+  const dx = bx - ax, dy = by - ay, d = Math.hypot(dx, dy);
+  const steps = Math.ceil(d / 0.2);
+  for (let i = 1; i < steps; i++){
+    const t = i / steps;
+    if (isWall(ax + dx * t, ay + dy * t)) return false;
   }
-  line([-4.2,-6.8],[4.2,-6.8],[4.2,6.8],[-4.2,6.8],[-4.2,-6.8]); // border
-  line([-4.2,0],[4.2,0]); // centre
-  const cc=[]; for(let i=0;i<=64;i++){const a=i/64*Math.PI*2; cc.push([Math.cos(a)*0.96,Math.sin(a)*0.96]);} line(...cc); // centre circle
-  line([-2.2,-6.8],[-2.2,-4.9],[2.2,-4.9],[2.2,-6.8]); // penalty box
-  line([-1.1,-6.8],[-1.1,-5.8],[1.1,-5.8],[1.1,-6.8]); // goal box
-
-  // Penalty spot
-  const dot = new THREE.Mesh(new THREE.CircleGeometry(0.05,16), new THREE.MeshBasicMaterial({color:0xffffff}));
-  dot.rotation.x = -Math.PI/2; dot.position.set(0,0.006,-4.9); scene.add(dot);
+  return true;
 }
 
-function buildGoal() {
-  const pm = makeMat(0xf5c518, 0.4, 0.5);
-  const pr = 0.06;
-  function post(x,y,z,rx=0,ry=0,rz=0,h=GZ.h){
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(pr,pr,h,10), pm);
-    m.position.set(x,y,z); m.rotation.set(rx,ry,rz); m.castShadow=true; scene.add(m);
-  }
-  post(GZ.xMin, GZ.h/2, GZ.z); // left post
-  post(GZ.xMax, GZ.h/2, GZ.z); // right post
-  post(0, GZ.h, GZ.z, 0,0,Math.PI/2, GZ.w); // crossbar
+// ------------------------------------------------------------------
+// ENEMY TYPES
+// ------------------------------------------------------------------
+const TYPES = {
+  imp:    { hp: 42,  speed: 1.75, dmg: 8,  range: 0.75, atkCd: 0.9, xp: 3, size: 0.95, vOff: 0.10, score: 10, ranged: false },
+  hound:  { hp: 22,  speed: 2.95, dmg: 6,  range: 0.65, atkCd: 0.7, xp: 2, size: 0.72, vOff: 0.26, score: 8,  ranged: false },
+  brute:  { hp: 140, speed: 1.15, dmg: 22, range: 0.95, atkCd: 1.3, xp: 9, size: 1.45, vOff: 0.00, score: 30, ranged: false },
+  caster: { hp: 55,  speed: 1.25, dmg: 15, range: 7.0,  atkCd: 2.1, xp: 6, size: 1.00, vOff: 0.05, score: 25, ranged: true, projSpeed: 3.4 },
+};
 
-  // Net (wireframe plane)
-  const net = new THREE.Mesh(
-    new THREE.PlaneGeometry(GZ.w, GZ.h, 8, 6),
-    new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:0.12, wireframe:true, side:THREE.DoubleSide })
-  );
-  net.position.set(0, GZ.h/2, GZ.z-0.3); scene.add(net);
-
-  // Goal floor glow
-  const glow = new THREE.Mesh(
-    new THREE.PlaneGeometry(GZ.w, 0.5),
-    new THREE.MeshBasicMaterial({ color:0xf5c518, transparent:true, opacity:0.22 })
-  );
-  glow.rotation.x=-Math.PI/2; glow.position.set(0,0.003,GZ.z); scene.add(glow);
-
-  // Stadium lights (optional spheres above posts)
-  const lm2 = makeMat(0xfff5cc, 0.2, 0.8);
-  [-4.5,4.5].forEach(x=>{
-    const lb = new THREE.Mesh(new THREE.SphereGeometry(0.18,8,8), lm2);
-    lb.position.set(x,6,-3); scene.add(lb);
-    const pl = new THREE.PointLight(0xfff5cc, 0.6, 18);
-    pl.position.set(x,5.5,-3); scene.add(pl);
+// ------------------------------------------------------------------
+// SPRITES — 프리렌더 (외부 이미지 없음, 캔버스 도형으로 그림)
+// ------------------------------------------------------------------
+function makeSprite(w, h, draw){
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  draw(g, w, h);
+  return c;
+}
+function eyes(g, x1, x2, y, r, color){
+  g.fillStyle = color; g.shadowColor = color; g.shadowBlur = 8;
+  g.beginPath(); g.arc(x1, y, r, 0, 7); g.arc(x2, y, r, 0, 7); g.fill();
+  g.shadowBlur = 0;
+}
+const SPR = {};
+function buildSprites(){
+  // IMP — 붉은 소악마
+  SPR.imp = makeSprite(48, 64, (g, w, h) => {
+    g.fillStyle = '#3a0d0d';
+    g.beginPath(); g.moveTo(14,64); g.lineTo(20,40); g.lineTo(28,40); g.lineTo(34,64); g.fill(); // legs
+    const bg = g.createLinearGradient(0,20,0,52);
+    bg.addColorStop(0,'#c1291f'); bg.addColorStop(1,'#6e130f');
+    g.fillStyle = bg;
+    g.beginPath(); g.ellipse(24,36,15,18,0,0,7); g.fill();           // body
+    g.fillStyle = '#8a1a13';
+    g.beginPath(); g.ellipse(8,34,5,11,-.4,0,7); g.ellipse(40,34,5,11,.4,0,7); g.fill(); // arms
+    g.fillStyle = '#a8221a';
+    g.beginPath(); g.arc(24,18,11,0,7); g.fill();                    // head
+    g.fillStyle = '#5e100c';
+    g.beginPath(); g.moveTo(15,10); g.lineTo(11,0); g.lineTo(19,8); g.closePath();
+    g.moveTo(33,10); g.lineTo(37,0); g.lineTo(29,8); g.closePath(); g.fill(); // horns
+    eyes(g, 20, 28, 18, 2.4, '#ffe24a');
+  });
+  // HOUND — 빠른 네발 짐승
+  SPR.hound = makeSprite(56, 40, (g, w, h) => {
+    g.fillStyle = '#241016';
+    for (const lx of [12,22,34,44]){ g.fillRect(lx,26,4,14); }        // legs
+    const bg = g.createLinearGradient(0,6,0,30);
+    bg.addColorStop(0,'#3b1a24'); bg.addColorStop(1,'#160a0e');
+    g.fillStyle = bg;
+    g.beginPath(); g.ellipse(28,20,22,12,0,0,7); g.fill();           // body
+    g.beginPath(); g.ellipse(48,16,9,8,0,0,7); g.fill();             // head
+    g.fillStyle = '#0d0508';
+    g.beginPath(); g.moveTo(54,14); g.lineTo(58,17); g.lineTo(52,20); g.fill(); // snout
+    eyes(g, 46, 51, 14, 2, '#ff2e2e');
+  });
+  // BRUTE — 거대 마수
+  SPR.brute = makeSprite(64, 76, (g, w, h) => {
+    g.fillStyle = '#2a0808';
+    g.fillRect(18,58,10,18); g.fillRect(38,58,10,18);               // legs
+    const bg = g.createLinearGradient(0,14,0,60);
+    bg.addColorStop(0,'#7a1410'); bg.addColorStop(1,'#3a0806');
+    g.fillStyle = bg;
+    g.beginPath(); g.moveTo(10,60); g.lineTo(16,24); g.lineTo(48,24); g.lineTo(54,60); g.closePath(); g.fill(); // torso
+    g.fillStyle = '#611210';
+    g.beginPath(); g.ellipse(9,30,7,15,-.3,0,7); g.ellipse(55,30,7,15,.3,0,7); g.fill();  // arms
+    g.fillStyle = '#8a1712';
+    g.beginPath(); g.arc(32,18,14,0,7); g.fill();                   // head
+    g.fillStyle = '#3a0806';
+    g.beginPath(); g.moveTo(20,10); g.lineTo(10,-2); g.lineTo(26,6); g.closePath();
+    g.moveTo(44,10); g.lineTo(54,-2); g.lineTo(38,6); g.closePath(); g.fill();  // horns
+    eyes(g, 27, 37, 18, 3, '#ff8a1a');
+  });
+  // CASTER — 떠다니는 마법사
+  SPR.caster = makeSprite(48, 66, (g, w, h) => {
+    const bg = g.createLinearGradient(0,10,0,60);
+    bg.addColorStop(0,'#3a1c56'); bg.addColorStop(1,'#160a24');
+    g.fillStyle = bg;
+    g.beginPath(); g.moveTo(24,6); g.lineTo(42,60); g.lineTo(6,60); g.closePath(); g.fill(); // robe
+    g.fillStyle = '#241038';
+    g.beginPath(); g.arc(24,16,11,0,7); g.fill();                   // hood
+    g.fillStyle = '#7cf'; g.shadowColor = '#7cf'; g.shadowBlur = 14;
+    g.beginPath(); g.arc(24,44,6,0,7); g.fill();                    // core
+    g.shadowBlur = 0;
+    eyes(g, 20, 28, 16, 2.2, '#63f0ff');
+  });
+  // FIREBALL
+  SPR.fireball = makeSprite(32, 32, (g, w, h) => {
+    const rg = g.createRadialGradient(16,16,1, 16,16,15);
+    rg.addColorStop(0,'#fff6c0'); rg.addColorStop(.4,'#ffae2e');
+    rg.addColorStop(.8,'#e23c14'); rg.addColorStop(1,'rgba(180,20,10,0)');
+    g.fillStyle = rg; g.beginPath(); g.arc(16,16,15,0,7); g.fill();
   });
 }
 
-function makePlayerMesh(color) {
-  const g = new THREE.Group();
-  const jMat = makeMat(color);
-  const sMat = makeMat(0xffcba4, 0.85, 0);   // skin
-  const wMat = makeMat(0xf0f0f0, 0.8, 0);    // white shorts/socks
-  const bMat = makeMat(0x111111, 0.95, 0);   // boots
-  const hMat = makeMat(0x3d2b1f, 0.9, 0);    // hair
+// ------------------------------------------------------------------
+// STATE
+// ------------------------------------------------------------------
+const player = { x:0, y:0, a:0, dirX:1, dirY:0, planeX:0, planeY:CFG.fov };
+const game = {
+  mode: 'menu',      // menu | play | levelup | pause | dead
+  time: 0, score: 0, kills: 0,
+  level: 1, xp: 0, xpNext: CFG.xpBase,
+  combo: 0, comboTimer: 0,
+  fireTimer: 0, spawnTimer: 1.5, pending: 0,
+  muzzle: 0, recoil: 0, hurt: 0, shake: 0, bob: 0, moving: false,
+};
+let enemies = [], projectiles = [], particles = [];
+let mouseDown = false;
+const keys = { f:false, b:false, l:false, r:false, sprint:false };
 
-  // Ground shadow
-  const shd = new THREE.Mesh(new THREE.CircleGeometry(0.22,16),
-    new THREE.MeshBasicMaterial({color:0,transparent:true,opacity:0.22,side:THREE.DoubleSide}));
-  shd.rotation.x=-Math.PI/2; shd.position.y=0.005; g.add(shd);
+// ------------------------------------------------------------------
+// DOM
+// ------------------------------------------------------------------
+const $ = id => document.getElementById(id);
+const canvas = $('view'), ctx = canvas.getContext('2d');
+let zBuffer = new Float32Array(1);
+const el = {
+  hud:$('hud'), wave:$('wave'), time:$('time'), kills:$('kills'), score:$('score'),
+  combo:$('combo'), comboRank:$('comboRank'), comboMul:$('comboMul'), comboBar:$('comboBar'),
+  hpBar:$('hpBar'), hpText:$('hpText'), level:$('level'), xpBar:$('xpBar'),
+  start:$('startScreen'), levelS:$('levelScreen'), cards:$('cards'),
+  pause:$('pauseScreen'), over:$('overScreen'), overStats:$('overStats'),
+};
 
-  // Leg pivot groups — pivot sits at hip height (y=0.36) so rotation.x swings leg
-  function makeLeg(xOff) {
-    const pivot = new THREE.Group();
-    pivot.position.set(xOff, 0.36, 0);
-    const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.072,0.065,0.17,6),sMat);
-    thigh.position.y=-0.085; thigh.castShadow=true; pivot.add(thigh);
-    const sock = new THREE.Mesh(new THREE.CylinderGeometry(0.058,0.054,0.19,6),wMat);
-    sock.position.y=-0.19; sock.castShadow=true; pivot.add(sock);
-    const boot = new THREE.Mesh(new THREE.BoxGeometry(0.11,0.07,0.18),bMat);
-    boot.position.set(0,-0.325,0.025); boot.castShadow=true; pivot.add(boot);
-    g.add(pivot); return pivot;
-  }
-  const lLeg = makeLeg(-0.09);
-  const rLeg = makeLeg(0.09);
+function resize(){
+  const w = canvas.clientWidth || window.innerWidth;
+  const h = canvas.clientHeight || window.innerHeight;
+  canvas.width  = Math.max(160, Math.floor(w * CFG.renderScale));
+  canvas.height = Math.max(120, Math.floor(h * CFG.renderScale));
+  zBuffer = new Float32Array(canvas.width);
+  ctx.imageSmoothingEnabled = false;
+}
+window.addEventListener('resize', resize);
 
-  // Shorts (static, covers hips)
-  const shorts = new THREE.Mesh(new THREE.CylinderGeometry(0.155,0.14,0.18,8),wMat);
-  shorts.position.y=0.36; shorts.castShadow=true; g.add(shorts);
-
-  // Torso (jersey)
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.31,0.37,0.19),jMat);
-  torso.position.y=0.63; torso.castShadow=true; g.add(torso);
-
-  // Arm pivot groups — pivot at shoulder (y=0.82), arm hangs below
-  function makeArm(xOff, rzBase) {
-    const pivot = new THREE.Group();
-    pivot.position.set(xOff, 0.82, 0);
-    pivot.rotation.z = rzBase;
-    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.056,0.048,0.32,6),jMat);
-    arm.position.y=-0.16; arm.castShadow=true; pivot.add(arm);
-    g.add(pivot); return pivot;
-  }
-  const lArm = makeArm(-0.24, Math.PI/9);
-  const rArm = makeArm(0.24, -Math.PI/9);
-
-  // Neck
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.068,0.072,0.1,6),sMat);
-  neck.position.y=0.87; g.add(neck);
-  // Head
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.145,12,10),sMat);
-  head.position.y=1.05; head.castShadow=true; g.add(head);
-  // Hair cap (upper hemisphere)
-  const hair = new THREE.Mesh(
-    new THREE.SphereGeometry(0.15,12,8,0,Math.PI*2,0,Math.PI*0.46),hMat);
-  hair.position.y=1.05; g.add(hair);
-
-  // Store limb refs for per-frame animation
-  g.userData.lLeg = lLeg; g.userData.rLeg = rLeg;
-  g.userData.lArm = lArm; g.userData.rArm = rArm;
-  return g;
+// ------------------------------------------------------------------
+// UPGRADES (레벨업 3택1) — 여기 배열에 추가만 하면 카드가 늘어남
+// ------------------------------------------------------------------
+const P = { dmgMul:1, fireRateMul:1, speedMul:1, pierce:0, lifesteal:0, comboBonus:0, maxHp:0, hp:0 };
+const UPGRADES = [
+  { ico:'🔥', name:'화력 강화', desc:'데미지 +25%', tier:'COMMON', apply:()=>P.dmgMul*=1.25 },
+  { ico:'⚡', name:'속사',      desc:'발사 속도 +22%', tier:'COMMON', apply:()=>P.fireRateMul*=1.22 },
+  { ico:'🏃', name:'질주',      desc:'이동 속도 +15%', tier:'COMMON', apply:()=>P.speedMul*=1.15 },
+  { ico:'❤️', name:'강인함',    desc:'최대 HP +30 · 즉시 회복', tier:'COMMON', apply:()=>{P.maxHp+=30; P.hp=Math.min(P.hp+30,P.maxHp);} },
+  { ico:'🎯', name:'관통탄',    desc:'탄환이 적 +1 추가 관통', tier:'RARE',   apply:()=>P.pierce+=1 },
+  { ico:'🩸', name:'흡혈',      desc:'처치 시 HP +4', tier:'RARE',   apply:()=>P.lifesteal+=4 },
+  { ico:'💀', name:'광폭화',    desc:'콤보 데미지 배율 +50%', tier:'RARE', apply:()=>P.comboBonus+=0.5 },
+  { ico:'💥', name:'대구경',    desc:'데미지 +45% · 발사속도 -10%', tier:'EPIC', apply:()=>{P.dmgMul*=1.45; P.fireRateMul*=0.9;} },
+];
+function playerSpeed(){ return CFG.moveSpeed * P.speedMul * (keys.sprint ? CFG.sprintMul : 1); }
+function currentDamage(){
+  const comboMul = 1 + Math.min(game.combo, 20) * CFG.comboDmgPer * (1 + P.comboBonus);
+  return CFG.bulletDamage * P.dmgMul * comboMul;
 }
 
-function makeBallMesh() {
-  const g = new THREE.Group();
-  const ball = new THREE.Mesh(new THREE.SphereGeometry(0.18,24,24), makeMat(0xffffff,0.3,0.15));
-  ball.castShadow=true; g.add(ball);
-  // seam lines
-  const seam = new THREE.Mesh(new THREE.SphereGeometry(0.183,8,8),
-    new THREE.MeshBasicMaterial({color:0x222222,wireframe:true,transparent:true,opacity:0.45}));
-  g.add(seam);
-  // ground shadow
-  const sh = new THREE.Mesh(new THREE.CircleGeometry(0.18,16),
-    new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0.28}));
-  sh.rotation.x=-Math.PI/2; sh.position.y=-0.17; g.add(sh);
-  return g;
+// ------------------------------------------------------------------
+// LIFECYCLE
+// ------------------------------------------------------------------
+function resetState(){
+  P.dmgMul = 1; P.fireRateMul = 1; P.speedMul = 1; P.pierce = 0;
+  P.lifesteal = 0; P.comboBonus = 0; P.maxHp = CFG.maxHp; P.hp = CFG.maxHp;
+  player.x = spawn.x; player.y = spawn.y; player.a = Math.PI / 2;
+  enemies = []; projectiles = []; particles = [];
+  game.time = 0; game.score = 0; game.kills = 0;
+  game.level = 1; game.xp = 0; game.xpNext = CFG.xpBase;
+  game.combo = 0; game.comboTimer = 0;
+  game.fireTimer = 0; game.spawnTimer = 1.5; game.pending = 0;
+  game.muzzle = game.recoil = game.hurt = game.shake = game.bob = 0;
+}
+function startGame(){
+  resetState();
+  game.mode = 'play';
+  el.start.classList.add('hidden');
+  el.over.classList.add('hidden');
+  el.hud.classList.remove('hidden');
+  requestLock();
+}
+function gameOver(){
+  game.mode = 'dead';
+  document.exitPointerLock?.();
+  el.overStats.innerHTML =
+    `생존 <b>${fmtTime(game.time)}</b> &nbsp;·&nbsp; WAVE <b>${waveNum()}</b><br>` +
+    `처치 <b>${game.kills}</b> &nbsp;·&nbsp; LV <b>${game.level}</b><br>` +
+    `SCORE <b>${game.score.toLocaleString()}</b>`;
+  el.over.classList.remove('hidden');
 }
 
-function makeSelRing() {
-  const r = new THREE.Mesh(
-    new THREE.TorusGeometry(0.42,0.06,8,32),
-    new THREE.MeshBasicMaterial({color:0xfacc15,transparent:true,opacity:0.9})
-  );
-  r.rotation.x=Math.PI/2; r.position.y=0.04; r.visible=false; scene.add(r); return r;
-}
-
-function makeAimLine() {
-  const pts=[new THREE.Vector3(0,0.1,0),new THREE.Vector3(0,0.1,0)];
-  const geo=new THREE.BufferGeometry().setFromPoints(pts);
-  const m=new THREE.Line(geo,new THREE.LineDashedMaterial({color:0xfacc15,dashSize:0.18,gapSize:0.09,transparent:true,opacity:0.9}));
-  m.computeLineDistances(); m.visible=false; scene.add(m); return m;
-}
-
-function makePowerRing() {
-  const r = new THREE.Mesh(
-    new THREE.TorusGeometry(0.5, 0.045, 8, 32),
-    new THREE.MeshBasicMaterial({color:0xfacc15, transparent:true, opacity:0.82})
-  );
-  r.rotation.x = Math.PI/2; r.position.y = 0.06; r.visible = false;
-  scene.add(r); return r;
-}
-
-// Dot-trail trajectory indicator (Score!-Hero style)
-const DOT_N = 14;
-function makeAimDots() {
-  const geo = new THREE.CircleGeometry(0.09, 10);
-  for (let i = 0; i < DOT_N; i++) {
-    const m = new THREE.Mesh(geo,
-      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 }));
-    m.rotation.x = -Math.PI / 2;
-    m.position.y = 0.045;
-    m.visible = false;
-    scene.add(m);
-    aimDotPool.push(m);
-  }
-}
-
-// Ground shadow blob that stays at y=0 and scales with ball height
-function initBallShadow() {
-  ballGroundShadow = new THREE.Mesh(
-    new THREE.CircleGeometry(0.24, 18),
-    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0 })
-  );
-  ballGroundShadow.rotation.x = -Math.PI / 2;
-  ballGroundShadow.position.y = 0.01;
-  ballGroundShadow.visible = false;
-  scene.add(ballGroundShadow);
-}
-
-// Particle pool for goals
-function initParticles() {
-  const count=80;
-  const geo=new THREE.BufferGeometry();
-  const pos=new Float32Array(count*3);
-  geo.setAttribute('position',new THREE.BufferAttribute(pos,3));
-  ptMesh=new THREE.Points(geo,new THREE.PointsMaterial({color:0xfacc15,size:0.18,transparent:true,opacity:0}));
-  scene.add(ptMesh);
-  for(let i=0;i<count;i++) particles.push({vx:0,vy:0,vz:0,life:0,i});
-}
-
-// ── INPUT ─────────────────────────────────────────────────
-const ray = new THREE.Raycaster();
-const fieldPlane = new THREE.Plane(new THREE.Vector3(0,1,0), 0); // y=0
-const mouse2D = new THREE.Vector2();
-let dragStart3 = null; // THREE.Vector3 of ball-holder when drag starts
-let isCurved = false;
-
-function getFieldPos(e) {
-  const src = e.touches ? e.touches[0] || e.changedTouches[0] : e;
-  mouse2D.set(
-    (src.clientX / window.innerWidth) * 2 - 1,
-    -(src.clientY / window.innerHeight) * 2 + 1
-  );
-  ray.setFromCamera(mouse2D, camera);
-  const hit = new THREE.Vector3();
-  ray.ray.intersectPlane(fieldPlane, hit);
-  return hit; // 3D point on y=0 plane
-}
-
-function dist3(a, b) { return Math.hypot(a.x-b.x, a.z-b.z); }
-function clamp(v,lo,hi){ return Math.max(lo,Math.min(hi,v)); }
-
-canvas.addEventListener('mousedown', onPointerDown);
-canvas.addEventListener('touchstart', e=>{ e.preventDefault(); onPointerDown(e); }, {passive:false});
-canvas.addEventListener('mouseup', onPointerUp);
-canvas.addEventListener('touchend', e=>{ e.preventDefault(); onPointerUp(e); }, {passive:false});
-canvas.addEventListener('mousemove', onPointerMove);
-canvas.addEventListener('touchmove', e=>{ e.preventDefault(); onPointerMove(e); }, {passive:false});
-
-function onPointerDown(e) {
-  if (G.screen !== 'play' || !G.play) return;
-  const play = G.play;
-  if (play.phase !== 'idle') return;
-  // Tap anywhere — aim starts from ball holder
-  const holder = play.players[play.ballHolder];
-  const hp = to3(holder.x, holder.y);
-  play.phase = 'aiming';
-  dragStart3 = new THREE.Vector3(hp.x, 0, hp.z);
-  powerRing.position.set(hp.x, 0.06, hp.z);
-  powerRing.scale.setScalar(0.3);
-  powerRing.visible = true;
-}
-
-function onPointerMove(e) {
-  if (G.screen !== 'play' || !G.play || G.play.phase !== 'aiming') return;
-  const fp = getFieldPos(e);
-  if (!fp || !dragStart3) return;
-  updateAimDots(dragStart3, fp);
-  // Power ring scale + color
-  const dx = fp.x - dragStart3.x, dz = fp.z - dragStart3.z;
-  const power = clamp(Math.hypot(dx, dz) / 3.2, 0, 1);
-  powerRing.scale.setScalar(0.3 + power * 2.8);
-  powerRing.material.color.setHex(power > 0.65 ? 0xef4444 : power > 0.35 ? 0xf97316 : 0xfacc15);
-}
-
-function onPointerUp(e) {
-  if (G.screen !== 'play' || !G.play) return;
-  const play = G.play;
-  if (play.phase !== 'aiming') return;
-  const fp = getFieldPos(e);
-  powerRing.visible = false;
-  hideAimDots();
-  if (!fp || !dragStart3) { play.phase='idle'; return; }
-  const dx = fp.x - dragStart3.x, dz = fp.z - dragStart3.z;
-  const power3 = clamp(Math.hypot(dx,dz), 0, 3.2); // 3.2 = MAX_DRAG/50
-  if (power3 < 0.24) { play.phase='idle'; return; }
-  executeShot(play, dragStart3.x, dragStart3.z, dx, dz, power3, isCurved);
-}
-
-function updateAimLine(from, to) {
-  // Keep hidden — dots are used instead
-  aimLine.visible = false;
-}
-
-function updateAimDots(from, to) {
-  const dx = to.x - from.x, dz = to.z - from.z;
-  const dist = Math.hypot(dx, dz);
-  // Clamp endpoint so dots don't extend too far
-  const maxDist = 3.5;
-  const ratio = dist > maxDist ? maxDist / dist : 1;
-  const ex = from.x + dx * ratio, ez = from.z + dz * ratio;
-
-  for (let i = 0; i < DOT_N; i++) {
-    const t = (i + 1) / (DOT_N + 1);
-    let x, z;
-    if (isCurved) {
-      const cx = (from.x + ex) / 2 + (ez - from.z) * 0.4;
-      const cz = (from.z + ez) / 2 - (ex - from.x) * 0.4;
-      const u = 1 - t;
-      x = u*u*from.x + 2*u*t*cx + t*t*ex;
-      z = u*u*from.z + 2*u*t*cz + t*t*ez;
-    } else {
-      x = from.x + (ex - from.x) * t;
-      z = from.z + (ez - from.z) * t;
-    }
-    const dot = aimDotPool[i];
-    dot.position.set(x, 0.045, z);
-    // Dots shrink and fade toward the end
-    const scale = 1.1 - t * 0.55;
-    dot.scale.setScalar(scale);
-    dot.material.opacity = 0.95 - t * 0.5;
-    dot.visible = true;
-  }
-}
-
-function hideAimDots() {
-  aimDotPool.forEach(d => { d.visible = false; });
-}
-
-document.getElementById('btn-curve').addEventListener('click', ()=>{
-  isCurved = !isCurved;
-  document.getElementById('btn-curve').classList.toggle('active', isCurved);
-  if (G.play) G.play.curved = isCurved;
-});
-
-// ── GAME LOGIC ────────────────────────────────────────────
-function initPlay(ci, si) {
-  const st = CHAPTERS[ci].stages[si];
-  const defSpeedMul = G.tactic === 0 ? 0.8 : 1;
-  G.play = {
-    st,
-    players: st.players.map(p=>({...p,isTeam:p.id!==0})),
-    defenders: st.defenders.map(d=>({...d, speed: d.isWall?0:d.speed*defSpeedMul})),
-    gk: {...st.gk},
-    ball: { x: st.players[0].x, y: st.players[0].y },
-    ballAnim: null,
-    ballHolder: 0,
-    phase: 'idle',
-    passes: 0, actions: 0, maxPower: 0,
-    curved: false, cornerShot: false,
-    timeLeft: st.timeLimit || 0,
-    flashTimer: 0, goalTimer: 0, failCount: 0, pulse: 0,
-  };
-  isCurved = false;
-  document.getElementById('btn-curve').classList.remove('active');
-  spawnActors();
-  updateHUD();
-}
-
-function resetPlay(play) {
-  const st = play.st;
-  const defSpeedMul = G.tactic === 0 ? 0.8 : 1;
-  play.players = st.players.map(p=>({...p,isTeam:p.id!==0}));
-  play.defenders = st.defenders.map(d=>({...d, speed:d.isWall?0:d.speed*defSpeedMul}));
-  play.gk = {...st.gk};
-  play.ball = { x: st.players[0].x, y: st.players[0].y };
-  play.ballAnim = null; play.ballHolder = 0; play.phase = 'idle';
-  play.passes = 0; play.actions = 0; play.maxPower = 0;
-  play.curved = false; play.cornerShot = false;
-  play.timeLeft = st.timeLimit || 0; play.flashTimer = 0;
-  spawnActors(); updateHUD();
-}
-
-function executeShot(play, fx, fz, dx, dz, power3, curved) {
-  const len = Math.hypot(dx,dz)||1;
-  const ndx=dx/len, ndz=dz/len;
-  const snapR = G.tactic===0 ? 1.0 : 0.8;
-
-  // Pass detection
-  let snapTarget = null;
-  if (power3 < 2.8) {
-    for (const pl of play.players) {
-      if (pl === play.players[play.ballHolder]) continue;
-      const p3 = to3(pl.x, pl.y);
-      const pdx=p3.x-fx, pdz=p3.z-fz;
-      const proj = pdx*ndx+pdz*ndz;
-      if (proj < 0) continue;
-      const perp = Math.abs(pdx*ndz - pdz*ndx);
-      if (perp < snapR && proj < power3*2.5) {
-        if (!snapTarget || proj < (snapTarget._proj||Infinity)) { snapTarget=pl; snapTarget._proj=proj; }
-      }
-    }
-  }
-
-  play.actions++;
-  if (curved) play.curved = true;
-
-  if (snapTarget) {
-    play.phase = 'flying';
-    const t3 = to3(snapTarget.x, snapTarget.y);
-    const speedMul = G.tactic===2 ? 1.2 : 1;
-    startAnim(play, fx, fz, t3.x, t3.z, curved, false, ()=>{
-      play.ballHolder = play.players.indexOf(snapTarget);
-      play.passes++;
-      play.ball.x = snapTarget.x; play.ball.y = snapTarget.y;
-      play.phase = 'idle';
-      updateHUD();
-    });
-  } else {
-    const shotDist = 6 + power3;
-    const tx = fx + ndx*shotDist, tz = fz + ndz*shotDist;
-    play.phase = 'flying';
-    play.maxPower = Math.max(play.maxPower, power3*50);
-    // Corner shot check
-    const tx2d = tx/SC+210;
-    if (tx2d < 145+30 || tx2d > 275-30) play.cornerShot = true;
-    startAnim(play, fx, fz, tx, tz, curved, true, ()=>{
-      if (checkGoal(play)) {
-        play.phase = 'goal'; play.goalTimer = 0;
-        spawnParticles(play.ball.x, play.ball.y);
-      } else {
-        triggerFail(play);
-      }
-    });
-  }
-}
-
-function startAnim(play, sx, sz, tx, tz, curved, isShot, onDone) {
-  const dist2d = Math.hypot(tx-sx, tz-sz);
-  const arcH = isShot ? dist2d * 0.3 : dist2d * 0.12;
-  const cx = curved ? (sx+tx)/2+(tz-sz)*0.4 : (sx+tx)/2;
-  const cz = curved ? (sz+tz)/2-(tx-sx)*0.4 : (sz+tz)/2;
-  play.ballAnim = { sx,sz,cx,cz,tx,tz,arcH,t:0,onDone };
-}
-
-function tickAnim(play, dt) {
-  const a = play.ballAnim;
-  if (!a) return;
-  a.t += dt * 0.045;
-  if (a.t >= 1) a.t = 1;
-  const t=a.t, u=1-t;
-  play.ball.x = (u*u*a.sx+2*u*t*a.cx+t*t*a.tx)/SC+210;
-  play.ball.y = (u*u*a.sz+2*u*t*a.cz+t*t*a.tz)/SC+340;
-  // arc height stored in 3D coords → convert back via SC
-  if (ballMesh) ballMesh.position.y = 0.18 + a.arcH * Math.sin(Math.PI*t);
-  if (a.t >= 1) { play.ballAnim=null; if(ballMesh) ballMesh.position.y=0.18; a.onDone(); }
-}
-
-function checkGoal(play) {
-  const b3 = to3(play.ball.x, play.ball.y);
-  return b3.x >= GZ.xMin && b3.x <= GZ.xMax && b3.z <= GZ.z+0.3 && b3.z >= GZ.z-0.8;
-}
-
-function checkIntercept(play) {
-  for (const d of play.defenders) {
-    const d3=to3(d.x,d.y), b3=to3(play.ball.x,play.ball.y);
-    if (Math.hypot(d3.x-b3.x,d3.z-b3.z) < 0.38+0.18) return true;
-  }
-  return false;
-}
-
-function checkGKSave(play) {
-  const g3=to3(play.gk.x,play.gk.y), b3=to3(play.ball.x,play.ball.y);
-  return Math.hypot(g3.x-b3.x,g3.z-b3.z) < 0.44+0.18;
-}
-
-function triggerFail(play) {
-  play.failCount++; play.phase='fail'; play.flashTimer=0;
-  renderer.setClearColor(0x3b0000);
-}
-
-function tickDefenders(play, dt) {
-  const b3 = to3(play.ball.x, play.ball.y);
-  play.defenders.forEach(d=>{
-    if (d.isWall||d.speed===0) return;
-    const d3=to3(d.x,d.y);
-    const dx=b3.x-d3.x, dz=b3.z-d3.z, len=Math.hypot(dx,dz)||1;
-    const spd = d.speed*SC*dt*0.06;
-    d.x += dx/len*spd/SC; d.y += dz/len*spd/SC;
-  });
-  // GK track ball X
-  const gkSpd = (play.gk.speed||3.5)*SC*dt*0.06;
-  if (play.phase==='flying') {
-    const diff = b3.x - to3(play.gk.x,play.gk.y).x;
-    play.gk.x += Math.sign(diff)*Math.min(Math.abs(diff)/SC, gkSpd/SC);
-    play.gk.x = Math.max(145+5, Math.min(275-5, play.gk.x));
-  }
-}
-
-// ── PARTICLES ─────────────────────────────────────────────
-function spawnParticles(bx2d, by2d) {
-  const p3 = to3(bx2d, by2d);
-  particles.forEach(p=>{
-    const a=Math.random()*Math.PI*2;
-    const spd=1.5+Math.random()*3;
-    p.x=p3.x; p.y=0.5; p.z=p3.z;
-    p.vx=Math.cos(a)*spd*0.05; p.vy=0.06+Math.random()*0.1; p.vz=Math.sin(a)*spd*0.05;
-    p.life=1;
-  });
-  ptMesh.material.opacity=1; ptMesh.material.color.setHex(0xfacc15);
-}
-
-function tickParticles() {
-  let alive=false;
-  const pos=ptMesh.geometry.attributes.position.array;
-  particles.forEach(p=>{
-    if(p.life<=0){ pos[p.i*3]=0; pos[p.i*3+1]=-5; pos[p.i*3+2]=0; return; }
-    p.x+=p.vx; p.y+=p.vy; p.z+=p.vz; p.vy-=0.004; p.life-=0.025;
-    pos[p.i*3]=p.x; pos[p.i*3+1]=p.y; pos[p.i*3+2]=p.z;
-    if(p.life>0) alive=true;
-  });
-  ptMesh.geometry.attributes.position.needsUpdate=true;
-  if(!alive) ptMesh.material.opacity=0;
-}
-
-// ── ACTOR SPAWN + SYNC ────────────────────────────────────
-function spawnActors() {
-  // Clear old
-  [...playerMeshes, ...defMeshes, ...bgMeshes].forEach(m=>scene.remove(m));
-  if(gkMesh) scene.remove(gkMesh);
-  playerMeshes=[]; defMeshes=[]; bgMeshes=[];
-
-  const play=G.play;
-  play.players.forEach(p=>{
-    const m = makePlayerMesh(p.isTeam?0x16a34a:0x1d4ed8);
-    const p3=to3(p.x,p.y); m.position.set(p3.x,0,p3.z); scene.add(m); playerMeshes.push(m);
-  });
-  play.defenders.forEach(d=>{
-    const m = makePlayerMesh(d.isWall?0x991b1b:0xdc2626);
-    const d3=to3(d.x,d.y); m.position.set(d3.x,0,d3.z); scene.add(m); defMeshes.push(m);
-  });
-  gkMesh = makePlayerMesh(0xd97706);
-  const g3=to3(play.gk.x,play.gk.y); gkMesh.position.set(g3.x,0,g3.z); scene.add(gkMesh);
-
-  // Ball
-  if(ballMesh) scene.remove(ballMesh);
-  ballMesh = makeBallMesh();
-  const b3=to3(play.ball.x,play.ball.y); ballMesh.position.set(b3.x,0.18,b3.z); scene.add(ballMesh);
-
-  // 11v11: dynamically fill remaining slots with background players
-  // Blue team: play.players already spawned → need 11 - play.players.length more
-  // Red team: play.defenders + GK already spawned → need 11 - play.defenders.length - 1 more
-  const bgBlueFull = [
-    {x:130,y:612},{x:165,y:607},{x:210,y:614},{x:255,y:607},{x:290,y:612}, // defensive line
-    {x:148,y:565},{x:183,y:560},{x:210,y:558},{x:237,y:560},{x:275,y:565}, // midfield line
+// ------------------------------------------------------------------
+// SURVIVOR: spawns / xp / combo
+// ------------------------------------------------------------------
+function waveNum(){ return 1 + Math.floor(game.time / 30); }
+function pickType(){
+  const t = game.time;
+  const table = [
+    ['imp',   5],
+    ['hound', t > 12 ? 4 : 2],
+    ['brute', t > 40 ? 2.4 : (t > 24 ? 1 : 0)],
+    ['caster',t > 60 ? 1.8 : (t > 34 ? 0.9 : 0)],
   ];
-  const bgRedFull = [
-    {x:130,y:140},{x:165,y:135},{x:210,y:138},{x:255,y:135},{x:290,y:140}, // defensive line (behind GK)
-    {x:148,y:208},{x:183,y:203},{x:210,y:200},{x:237,y:203},{x:275,y:208}, // midfield line
-  ];
-  const blueExtra = Math.max(0, 11 - play.players.length);
-  const redExtra  = Math.max(0, 11 - play.defenders.length - 1); // -1 for GK
-  bgBlueFull.slice(0, blueExtra).forEach(p=>{
-    const m=makePlayerMesh(0x1d4ed8);
-    const p3=to3(p.x,p.y); m.position.set(p3.x,0,p3.z); scene.add(m); bgMeshes.push(m);
-  });
-  bgRedFull.slice(0, redExtra).forEach(p=>{
-    const m=makePlayerMesh(0xdc2626);
-    const p3=to3(p.x,p.y); m.position.set(p3.x,0,p3.z); scene.add(m); bgMeshes.push(m);
-  });
-
-  // Sel ring follows ball holder
-  scene.remove(selRing);
-  const hp=to3(play.players[play.ballHolder].x, play.players[play.ballHolder].y);
-  selRing.position.set(hp.x,0.04,hp.z); scene.add(selRing); selRing.visible=true;
+  let sum = 0; for (const [,w] of table) sum += w;
+  let r = Math.random() * sum;
+  for (const [k, w] of table){ if ((r -= w) <= 0) return k; }
+  return 'imp';
 }
-
-function syncActors(play, pulse) {
-  // Ball-holder idle sway + leg rock
-  play.players.forEach((p,i) => {
-    const m = playerMeshes[i];
-    const p3 = to3(p.x, p.y);
-    m.position.set(p3.x, 0, p3.z);
-    const ud = m.userData;
-    if (i === play.ballHolder) {
-      m.scale.setScalar(1 + 0.05 * Math.sin(pulse * 0.12));
-      if (ud.lLeg) {
-        const idle = Math.sin(pulse * 0.05) * 0.08;
-        ud.lLeg.rotation.x =  idle; ud.rLeg.rotation.x = -idle;
-        ud.lArm.rotation.x = -idle * 0.5; ud.rArm.rotation.x = idle * 0.5;
-      }
-    } else {
-      m.scale.setScalar(1);
-    }
-  });
-
-  // Defenders: running animation + face movement direction
-  play.defenders.forEach((d,i) => {
-    const m = defMeshes[i];
-    const d3 = to3(d.x, d.y);
-    const prevX = m.position.x, prevZ = m.position.z;
-    m.position.set(d3.x, 0, d3.z);
-    if (!d.isWall) {
-      const mvx = d3.x - prevX, mvz = d3.z - prevZ;
-      if (Math.hypot(mvx, mvz) > 0.0005) m.rotation.y = Math.atan2(-mvx, -mvz);
-      const ud = m.userData;
-      if (ud.lLeg) {
-        const s = Math.sin(pulse * 0.07 + i * 1.2) * 0.45;
-        ud.lLeg.rotation.x =  s; ud.rLeg.rotation.x = -s;
-        ud.lArm.rotation.x = -s * 0.5; ud.rArm.rotation.x = s * 0.5;
-      }
-    }
-  });
-
-  // GK faces field, shuffles side to side
-  const g3 = to3(play.gk.x, play.gk.y);
-  gkMesh.position.set(g3.x, 0, g3.z);
-  gkMesh.rotation.y = Math.PI;
-  const gkUD = gkMesh.userData;
-  if (gkUD.lLeg) {
-    const gs = Math.sin(pulse * 0.09) * 0.15;
-    gkUD.lLeg.rotation.x = gs; gkUD.rLeg.rotation.x = -gs;
-  }
-
-  // Ball position
-  const b3 = to3(play.ball.x, play.ball.y);
-  if (ballMesh) { ballMesh.position.x = b3.x; ballMesh.position.z = b3.z; }
-
-  // Spin ball perpendicular to travel direction during flight
-  if (play.phase === 'flying' && ballMesh && play.ballAnim) {
-    const a = play.ballAnim;
-    const tdx = a.tx - a.sx, tdz = a.tz - a.sz;
-    const len = Math.hypot(tdx, tdz) || 1;
-    ballMesh.rotation.x += (tdz / len) * 0.18;
-    ballMesh.rotation.z -= (tdx / len) * 0.18;
-  }
-
-  // Dynamic ground shadow under ball
-  if (ballGroundShadow && ballMesh) {
-    ballGroundShadow.position.x = ballMesh.position.x;
-    ballGroundShadow.position.z = ballMesh.position.z;
-    const h = Math.max(0, ballMesh.position.y - 0.18);
-    ballGroundShadow.scale.setScalar(Math.max(0.25, 1 - h * 0.1));
-    ballGroundShadow.material.opacity = Math.max(0.04, 0.38 - h * 0.06);
-    ballGroundShadow.visible = (play.phase === 'flying');
-  }
-
-  // Sel ring pulses around ball holder
-  const hp = to3(play.players[play.ballHolder].x, play.players[play.ballHolder].y);
-  selRing.position.set(hp.x, 0.04, hp.z);
-  selRing.visible = play.phase === 'idle' || play.phase === 'aiming';
-  selRing.material.opacity = 0.6 + 0.3 * Math.sin(pulse * 0.12);
-}
-
-// ── HUD ───────────────────────────────────────────────────
-function updateHUD() {
-  const play=G.play; if(!play) return;
-  document.getElementById('hud-title').textContent=play.st.title;
-  document.getElementById('hud-passes').textContent=`패스: ${play.passes}`;
-  document.getElementById('hud-fails').textContent=`실패: ${play.failCount}/3`;
-  const timeEl=document.getElementById('hud-time');
-  if(play.st.timeLimit){ timeEl.textContent=`⏱ ${Math.ceil(Math.max(0,play.timeLeft))}s`; timeEl.className=play.timeLeft<=3?'urgent':''; }
-  else timeEl.textContent='';
-  document.getElementById('hud-goal-text').textContent=play.st.goal;
-}
-
-// ── SCREEN MANAGER ────────────────────────────────────────
-function showScreen(id) {
-  ['screen-title','screen-select','screen-tactic','screen-result'].forEach(s=>{
-    document.getElementById(s).classList.toggle('hidden', s!==id);
-  });
-  const playing = id===null;
-  document.getElementById('hud').classList.toggle('hidden',!playing);
-  document.getElementById('hud-goal-text').style.display=playing?'':'none';
-  document.getElementById('btn-curve').style.display=playing?'':'none';
-  G.screen = playing?'play':id.replace('screen-','');
-}
-
-function buildSelectScreen() {
-  const cont=document.getElementById('chapters-container');
-  cont.innerHTML='';
-  cont.style.cssText='display:flex;flex-direction:column;gap:12px;';
-  CHAPTERS.forEach((ch,ci)=>{
-    const block=document.createElement('div'); block.className='chapter-block';
-    const nm=document.createElement('div'); nm.className='chapter-name'; nm.textContent=ch.name; block.appendChild(nm);
-    const grid=document.createElement('div'); grid.className='stage-grid';
-    ch.stages.forEach((st,si)=>{
-      const gi=ci*5+si;
-      const unlocked=gi===0||G.stars[gi-1]>0||G.stars[gi]>0;
-      const btn=document.createElement('button');
-      btn.className='stage-btn'+(G.stars[gi]===3?' done':unlocked?' unlocked':'');
-      btn.disabled=!unlocked;
-      btn.innerHTML=`<span class="stage-num">${gi+1}</span><span class="stage-stars">${'★'.repeat(G.stars[gi])}${'☆'.repeat(3-G.stars[gi])}</span><span class="stage-lbl">${st.title}</span>`;
-      btn.addEventListener('click',()=>{ G.chapter=ci; G.stage=si; G.tactic=0; buildTacticScreen(); showScreen('screen-tactic'); });
-      grid.appendChild(btn);
+function spawnEnemy(){
+  for (let tries = 0; tries < 30; tries++){
+    const x = 1 + Math.random() * (MAP_W - 2);
+    const y = 1 + Math.random() * (MAP_H - 2);
+    if (isWall(x, y)) continue;
+    if (Math.hypot(x - player.x, y - player.y) < 5.5) continue;
+    const key = pickType(), t = TYPES[key];
+    enemies.push({
+      kind:key, x, y, hp:t.hp, maxHp:t.hp, atk:0, hitFlash:0,
+      sprite:SPR[key], size:t.size, vOffset:t.vOff, t,
     });
-    block.appendChild(grid); cont.appendChild(block);
-  });
+    return;
+  }
+}
+function updateSpawns(dt){
+  game.spawnTimer -= dt;
+  if (game.spawnTimer > 0) return;
+  const t = game.time;
+  const maxAlive = Math.min(70, 10 + Math.floor(t / 6));
+  const interval = Math.max(0.34, 1.6 - t * 0.012);
+  game.spawnTimer = interval;
+  if (enemies.length >= maxAlive) return;
+  const burst = Math.min(4, 1 + Math.floor(t / 45));
+  for (let i = 0; i < burst && enemies.length < maxAlive; i++) spawnEnemy();
+}
+function comboMul(){
+  return 1 + Math.floor(game.combo / 4) * 0.5;   // 4콤보마다 +0.5x
+}
+function comboRankName(m){
+  if (m >= 5) return 'SSS'; if (m >= 4) return 'SS'; if (m >= 3) return 'S';
+  if (m >= 2.5) return 'A'; if (m >= 2) return 'B'; if (m >= 1.5) return 'C';
+  return 'D';
+}
+function gainXp(n){
+  game.xp += n;
+  while (game.xp >= game.xpNext){
+    game.xp -= game.xpNext;
+    game.level++;
+    game.xpNext = Math.floor(game.xpNext * CFG.xpGrowth);
+    game.pending++;
+  }
+  if (game.pending > 0 && game.mode === 'play') openLevelUp();
 }
 
-function buildTacticScreen() {
-  const st=CHAPTERS[G.chapter].stages[G.stage];
-  const gi=G.chapter*5+G.stage;
-  document.getElementById('tactic-title-el').textContent=st.title;
-  document.getElementById('tactic-sit-el').textContent=st.situation;
-  document.getElementById('tactic-goal-el').textContent=st.goal;
-  const cont=document.getElementById('tactics-container'); cont.innerHTML='';
-  TACTICS.forEach((t,i)=>{
-    const card=document.createElement('div');
-    card.className='tactic-card'+(G.tactic===i?' sel':'');
-    card.innerHTML=`<div class="tac-icon">${t.icon}</div><div class="tac-name">${t.name}</div><div class="tac-desc">${t.desc.replace('\n','<br>')}</div>`;
-    card.addEventListener('click',()=>{ G.tactic=i; buildTacticScreen(); });
-    cont.appendChild(card);
-  });
+// ------------------------------------------------------------------
+// COMBAT
+// ------------------------------------------------------------------
+function tryShoot(){
+  if (game.fireTimer > 0) return;
+  game.fireTimer = CFG.fireCooldown * P.fireRateMul;
+  game.muzzle = 1; game.recoil = 1; game.shake = Math.max(game.shake, 0.25);
+
+  const W = canvas.width;
+  const invDet = 1 / (player.planeX * player.dirY - player.dirX * player.planeY);
+  const cands = [];
+  for (const e of enemies){
+    const sx = e.x - player.x, sy = e.y - player.y;
+    const tX = invDet * (player.dirY * sx - player.dirX * sy);
+    const tY = invDet * (-player.planeY * sx + player.planeX * sy);
+    if (tY <= 0.1) continue;                        // behind camera
+    const screenX = (W / 2) * (1 + tX / tY);
+    const halfW = Math.abs(canvas.height / tY) * e.size * 0.42;
+    if (Math.abs(screenX - W / 2) > Math.max(halfW, 5)) continue; // not under crosshair
+    const col = W >> 1;
+    if (tY > zBuffer[col] + 0.05) continue;         // blocked by wall
+    cands.push({ e, d: tY });
+  }
+  cands.sort((a, b) => a.d - b.d);
+  const dmg = currentDamage();
+  const hits = 1 + P.pierce;
+  for (let i = 0; i < cands.length && i < hits; i++) damageEnemy(cands[i].e, dmg);
+}
+function damageEnemy(e, dmg){
+  e.hp -= dmg; e.hitFlash = 0.08;
+  burst(e, 5, '#ff5a2a');
+  if (e.hp <= 0) killEnemy(e);
+}
+function killEnemy(e){
+  const idx = enemies.indexOf(e); if (idx < 0) return;
+  enemies.splice(idx, 1);
+  game.combo++; game.comboTimer = CFG.comboWindow + P.comboBonus * 1.0;
+  const m = comboMul();
+  gainXp(Math.round(e.t.xp * m));
+  game.score += Math.round(e.t.score * m);
+  game.kills++;
+  if (P.lifesteal) P.hp = Math.min(P.maxHp, P.hp + P.lifesteal);
+  burst(e, 14, '#b81616');
+}
+function hurtPlayer(dmg){
+  if (game.mode !== 'play') return;
+  P.hp -= dmg;
+  game.hurt = 1; game.shake = Math.max(game.shake, 0.6);
+  game.combo = 0; game.comboTimer = 0;    // 맞으면 콤보 리셋 (공격적 플레이 유도)
+  if (P.hp <= 0){ P.hp = 0; gameOver(); }
 }
 
-function showResult(scored, stars, passes, timeLeft) {
-  G.result={scored,stars,passes,timeLeft};
-  const gi=G.chapter*5+G.stage;
-  document.getElementById('result-header').textContent=scored?'⚽ GOAL!':'실패...';
-  document.getElementById('result-header').className=scored?'ok':'fail';
-  document.getElementById('result-stars-el').textContent='★'.repeat(stars)+'☆'.repeat(3-stars);
-  document.getElementById('result-stats-el').textContent=`패스 ${passes}회`;
-  const hasNext=gi<9;
-  document.getElementById('btn-next').textContent=hasNext?'다음 ▶':'완료!';
-  document.getElementById('btn-next').disabled=!scored;
-  showScreen('screen-result');
+// ------------------------------------------------------------------
+// ENEMIES / PROJECTILES UPDATE
+// ------------------------------------------------------------------
+function updateEnemies(dt){
+  const R = 0.28;
+  for (const e of enemies){
+    if (e.hitFlash > 0) e.hitFlash -= dt;
+    if (e.atk > 0) e.atk -= dt;
+    const dx = player.x - e.x, dy = player.y - e.y;
+    const dist = Math.hypot(dx, dy) || 1e-4;
+    const t = e.t;
+
+    if (dist > t.range){                         // approach
+      const ux = dx / dist, uy = dy / dist;
+      const sp = t.speed * dt;
+      const nx = e.x + ux * sp, ny = e.y + uy * sp;
+      if (!collides(nx, e.y, R)) e.x = nx;
+      if (!collides(e.x, ny, R)) e.y = ny;
+    }
+    if (e.atk <= 0){                              // attack
+      if (!t.ranged && dist <= t.range){
+        hurtPlayer(t.dmg); e.atk = t.atkCd;
+      } else if (t.ranged && dist <= t.range && lineOfSight(e.x, e.y, player.x, player.y)){
+        const ux = dx / dist, uy = dy / dist;
+        projectiles.push({ x:e.x, y:e.y, vx:ux*t.projSpeed, vy:uy*t.projSpeed,
+                           dmg:t.dmg, sprite:SPR.fireball, size:0.5, vOffset:-0.05 });
+        e.atk = t.atkCd;
+      }
+    }
+  }
+}
+function updateProjectiles(dt){
+  for (let i = projectiles.length - 1; i >= 0; i--){
+    const p = projectiles[i];
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    if (isWall(p.x, p.y)){ projectiles.splice(i, 1); continue; }
+    if (Math.hypot(p.x - player.x, p.y - player.y) < 0.42){
+      hurtPlayer(p.dmg); projectiles.splice(i, 1);
+    }
+  }
 }
 
-// ── BUTTON WIRING ─────────────────────────────────────────
-document.getElementById('btn-start').addEventListener('click',()=>{ buildSelectScreen(); showScreen('screen-select'); });
-document.getElementById('btn-select-back').addEventListener('click',()=>showScreen('screen-title'));
-document.getElementById('btn-tactic-back').addEventListener('click',()=>{ buildSelectScreen(); showScreen('screen-select'); });
-document.getElementById('btn-play').addEventListener('click',()=>{
-  initPlay(G.chapter,G.stage); showScreen(null);
+// ------------------------------------------------------------------
+// PARTICLES (screen-space bursts at enemy projected position)
+// ------------------------------------------------------------------
+function burst(e, n, color){
+  const W = canvas.width, H = canvas.height;
+  const invDet = 1 / (player.planeX * player.dirY - player.dirX * player.planeY);
+  const sx = e.x - player.x, sy = e.y - player.y;
+  const tX = invDet * (player.dirY * sx - player.dirX * sy);
+  const tY = invDet * (-player.planeY * sx + player.planeX * sy);
+  if (tY <= 0.1) return;
+  const px = (W / 2) * (1 + tX / tY);
+  const py = H / 2;
+  for (let i = 0; i < n; i++){
+    const a = Math.random() * 7, s = 40 + Math.random() * 140;
+    particles.push({ x:px, y:py, vx:Math.cos(a)*s, vy:Math.sin(a)*s - 40,
+      life:0.5 + Math.random()*0.4, color, r:1 + Math.random()*2.5 });
+  }
+}
+function updateParticles(dt){
+  for (let i = particles.length - 1; i >= 0; i--){
+    const p = particles[i];
+    p.life -= dt; if (p.life <= 0){ particles.splice(i, 1); continue; }
+    p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 300 * dt;
+  }
+}
+
+// ------------------------------------------------------------------
+// UPDATE
+// ------------------------------------------------------------------
+function update(dt){
+  // 방향 벡터 갱신
+  player.dirX = Math.cos(player.a); player.dirY = Math.sin(player.a);
+  player.planeX = -Math.sin(player.a) * CFG.fov; player.planeY = Math.cos(player.a) * CFG.fov;
+
+  // 이펙트 감쇠
+  game.muzzle = Math.max(0, game.muzzle - dt * 7);
+  game.recoil = Math.max(0, game.recoil - dt * 6);
+  game.hurt   = Math.max(0, game.hurt - dt * 2);
+  game.shake  = Math.max(0, game.shake - dt * 2.5);
+
+  if (game.mode !== 'play') return;
+
+  game.time += dt;
+  if (game.fireTimer > 0) game.fireTimer -= dt;
+
+  // 이동
+  let mx = 0, my = 0;
+  const px2 = -player.dirY, py2 = player.dirX;       // 오른쪽(스트레이프) 벡터
+  if (keys.f){ mx += player.dirX; my += player.dirY; }
+  if (keys.b){ mx -= player.dirX; my -= player.dirY; }
+  if (keys.r){ mx += px2; my += py2; }
+  if (keys.l){ mx -= px2; my -= py2; }
+  const ml = Math.hypot(mx, my);
+  game.moving = ml > 0;
+  if (ml > 0){
+    mx /= ml; my /= ml;
+    const sp = playerSpeed() * dt;
+    const nx = player.x + mx * sp, ny = player.y + my * sp;
+    if (!collides(nx, player.y, CFG.playerRadius)) player.x = nx;
+    if (!collides(player.x, ny, CFG.playerRadius)) player.y = ny;
+    game.bob += dt * 9 * (keys.sprint ? 1.35 : 1);
+  }
+
+  if (mouseDown) tryShoot();
+
+  updateEnemies(dt);
+  updateProjectiles(dt);
+  updateSpawns(dt);
+  updateParticles(dt);
+
+  // 콤보 감쇠
+  if (game.combo > 0){
+    game.comboTimer -= dt;
+    if (game.comboTimer <= 0){ game.combo = 0; game.comboTimer = 0; }
+  }
+}
+
+// ------------------------------------------------------------------
+// RENDER
+// ------------------------------------------------------------------
+function render(){
+  const W = canvas.width, H = canvas.height;
+
+  // 화면 흔들림
+  let ox = 0, oy = 0;
+  if (game.shake > 0){ ox = (Math.random()*2-1)*game.shake*6; oy = (Math.random()*2-1)*game.shake*6; }
+  ctx.setTransform(1,0,0,1,ox,oy);
+
+  // 천장 / 바닥
+  const horizon = H / 2;
+  let gsky = ctx.createLinearGradient(0,0,0,horizon);
+  gsky.addColorStop(0,'#07070c'); gsky.addColorStop(1,'#1a1220');
+  ctx.fillStyle = gsky; ctx.fillRect(-8, -8, W+16, horizon+8);
+  let gfl = ctx.createLinearGradient(0,horizon,0,H);
+  gfl.addColorStop(0,'#241a18'); gfl.addColorStop(1,'#0c0808');
+  ctx.fillStyle = gfl; ctx.fillRect(-8, horizon, W+16, H-horizon+16);
+
+  // 벽 (DDA raycasting)
+  for (let x = 0; x < W; x += CFG.colStep){
+    const cameraX = 2 * x / W - 1;
+    const rayX = player.dirX + player.planeX * cameraX;
+    const rayY = player.dirY + player.planeY * cameraX;
+    let mapX = player.x | 0, mapY = player.y | 0;
+    const dDX = Math.abs(1 / rayX), dDY = Math.abs(1 / rayY);
+    let stepX, stepY, sDX, sDY, side = 0;
+    if (rayX < 0){ stepX = -1; sDX = (player.x - mapX) * dDX; } else { stepX = 1; sDX = (mapX + 1 - player.x) * dDX; }
+    if (rayY < 0){ stepY = -1; sDY = (player.y - mapY) * dDY; } else { stepY = 1; sDY = (mapY + 1 - player.y) * dDY; }
+    let hit = 0, guard = 0;
+    while (!hit && guard++ < 64){
+      if (sDX < sDY){ sDX += dDX; mapX += stepX; side = 0; }
+      else { sDY += dDY; mapY += stepY; side = 1; }
+      if (mapX < 0 || mapY < 0 || mapX >= MAP_W || mapY >= MAP_H){ hit = 1; break; }
+      if (grid[mapY][mapX] === 1) hit = 1;
+    }
+    let perp = side === 0 ? (sDX - dDX) : (sDY - dDY);
+    if (perp < 0.02) perp = 0.02;
+    const lineH = H / perp;
+    const y0 = horizon - lineH / 2;
+
+    // 벽 색: 거리 안개 + 면 방향 음영 + 타일 격자
+    let bright = Math.max(0.12, 1 - perp / CFG.maxViewDist);
+    if (side === 1) bright *= 0.72;
+    if (((mapX + mapY) & 1) === 0) bright *= 0.9;
+    const rC = (150 * bright) | 0, gC = (92 * bright) | 0, bC = (78 * bright) | 0;
+    ctx.fillStyle = `rgb(${rC},${gC},${bC})`;
+    ctx.fillRect(x, y0, CFG.colStep, lineH);
+
+    for (let c = 0; c < CFG.colStep && x + c < W; c++) zBuffer[x + c] = perp;
+  }
+
+  // 스프라이트 (적 + 투사체) — 원거리→근거리, 벽 z-test
+  const rends = enemies.concat(projectiles);
+  for (const s of rends){ const dx=s.x-player.x, dy=s.y-player.y; s._d = dx*dx+dy*dy; }
+  rends.sort((a, b) => b._d - a._d);
+  const invDet = 1 / (player.planeX * player.dirY - player.dirX * player.planeY);
+  for (const s of rends){
+    const sx = s.x - player.x, sy = s.y - player.y;
+    const tX = invDet * (player.dirY * sx - player.dirX * sy);
+    const tY = invDet * (-player.planeY * sx + player.planeX * sy);
+    if (tY <= 0.1) continue;
+    const screenX = (W / 2) * (1 + tX / tY);
+    const sizeUnit = Math.abs(H / tY);
+    const spriteH = sizeUnit * (s.size || 1);
+    const spriteW = spriteH * ((s.sprite.width) / (s.sprite.height));
+    const vMove = spriteH * (s.vOffset || 0);
+    const y0 = horizon - spriteH / 2 + vMove;
+    const startX = Math.floor(screenX - spriteW / 2);
+    const endX = Math.ceil(screenX + spriteW / 2);
+    const img = s.sprite, iw = img.width, ih = img.height;
+    for (let x = startX; x < endX; x++){
+      if (x < 0 || x >= W) continue;
+      if (tY >= zBuffer[x]) continue;                     // 벽 뒤 가림
+      const texX = ((x - (screenX - spriteW / 2)) / spriteW * iw) | 0;
+      if (texX < 0 || texX >= iw) continue;
+      ctx.drawImage(img, texX, 0, 1, ih, x, y0, 1, spriteH);
+    }
+    // 피격 플래시
+    if (s.hitFlash > 0){
+      ctx.globalAlpha = 0.6; ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(startX, y0, spriteW, spriteH);
+      ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+    }
+  }
+
+  // 파티클
+  ctx.globalCompositeOperation = 'lighter';
+  for (const p of particles){
+    ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 1.6));
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);
+  }
+  ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+
+  drawWeapon(W, H);
+  drawCrosshair(W, H);
+  drawMinimap(W, H);
+
+  // 피격 붉은 플래시 + 비네트
+  ctx.setTransform(1,0,0,1,0,0);
+  if (game.hurt > 0){
+    ctx.fillStyle = `rgba(180,10,10,${game.hurt * 0.45})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+  const vg = ctx.createRadialGradient(W/2,H/2, H*0.3, W/2,H/2, H*0.75);
+  vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,0.55)');
+  ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+}
+
+function drawWeapon(W, H){
+  const bob = game.moving ? Math.sin(game.bob) * H * 0.012 : 0;
+  const bobx = game.moving ? Math.cos(game.bob * 0.5) * W * 0.01 : 0;
+  const kick = game.recoil * H * 0.05;
+  const cx = W / 2 + bobx, by = H + bob + kick;
+  const s = H * 0.13;                       // gun scale
+  // 총열
+  ctx.fillStyle = '#15181c';
+  ctx.fillRect(cx - s*0.16, by - s*2.0, s*0.32, s*1.7);
+  ctx.fillStyle = '#0a0c0e';
+  ctx.fillRect(cx - s*0.10, by - s*2.0, s*0.20, s*1.7);
+  // 몸통
+  ctx.fillStyle = '#20242a';
+  ctx.beginPath();
+  ctx.moveTo(cx - s*0.9, by); ctx.lineTo(cx - s*0.5, by - s*0.9);
+  ctx.lineTo(cx + s*0.5, by - s*0.9); ctx.lineTo(cx + s*0.9, by); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#33393f';
+  ctx.fillRect(cx - s*0.6, by - s*0.85, s*1.2, s*0.16);   // 하이라이트
+  // 머즐 플래시
+  if (game.muzzle > 0){
+    const mf = s * (0.5 + game.muzzle * 1.4);
+    ctx.globalCompositeOperation = 'lighter';
+    const g = ctx.createRadialGradient(cx, by - s*2.0, 1, cx, by - s*2.0, mf);
+    g.addColorStop(0,'rgba(255,250,200,'+game.muzzle+')');
+    g.addColorStop(.5,'rgba(255,150,40,'+game.muzzle*0.8+')');
+    g.addColorStop(1,'rgba(255,80,20,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, by - s*2.0, mf, 0, 7); ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+  }
+}
+function drawCrosshair(W, H){
+  const cx = W/2, cy = H/2, g = 3, l = 7;
+  ctx.strokeStyle = 'rgba(255,120,60,0.9)'; ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(cx-g-l, cy); ctx.lineTo(cx-g, cy);
+  ctx.moveTo(cx+g, cy); ctx.lineTo(cx+g+l, cy);
+  ctx.moveTo(cx, cy-g-l); ctx.lineTo(cx, cy-g);
+  ctx.moveTo(cx, cy+g); ctx.lineTo(cx, cy+g+l);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,120,60,0.9)'; ctx.fillRect(cx-0.5, cy-0.5, 1.5, 1.5);
+}
+function drawMinimap(W, H){
+  const scale = Math.max(3, (H * 0.006) | 0);
+  const mw = MAP_W * scale, mh = MAP_H * scale;
+  const ox = W - mw - 8, oy = 8;
+  ctx.globalAlpha = 0.72;
+  ctx.fillStyle = '#000'; ctx.fillRect(ox-2, oy-2, mw+4, mh+4);
+  for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++){
+    if (grid[y][x] === 1){ ctx.fillStyle = '#4a3330'; ctx.fillRect(ox+x*scale, oy+y*scale, scale, scale); }
+  }
+  ctx.fillStyle = '#ff3b30';
+  for (const e of enemies) ctx.fillRect(ox+e.x*scale-1, oy+e.y*scale-1, 2, 2);
+  ctx.fillStyle = '#5cf0ff';
+  ctx.fillRect(ox+player.x*scale-1.5, oy+player.y*scale-1.5, 3, 3);
+  ctx.strokeStyle = '#5cf0ff'; ctx.lineWidth = 1; ctx.beginPath();
+  ctx.moveTo(ox+player.x*scale, oy+player.y*scale);
+  ctx.lineTo(ox+(player.x+player.dirX)*scale, oy+(player.y+player.dirY)*scale); ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+// ------------------------------------------------------------------
+// HUD SYNC
+// ------------------------------------------------------------------
+function fmtTime(t){ const m = (t/60)|0, s = (t%60)|0; return m + ':' + (s<10?'0'+s:s); }
+function syncHud(){
+  el.wave.textContent = waveNum();
+  el.time.textContent = fmtTime(game.time);
+  el.kills.textContent = game.kills;
+  el.score.textContent = game.score.toLocaleString();
+  el.hpBar.style.width = Math.max(0, P.hp / P.maxHp * 100) + '%';
+  el.hpText.textContent = Math.ceil(P.hp);
+  el.level.textContent = game.level;
+  el.xpBar.style.width = (game.xp / game.xpNext * 100) + '%';
+  if (game.combo > 1){
+    el.combo.classList.remove('hidden');
+    const m = comboMul();
+    el.comboRank.textContent = comboRankName(m);
+    el.comboMul.textContent = 'x' + m.toFixed(1) + '  (' + game.combo + ')';
+    el.comboBar.style.width = Math.max(0, game.comboTimer / CFG.comboWindow * 100) + '%';
+  } else el.combo.classList.add('hidden');
+}
+
+// ------------------------------------------------------------------
+// LEVEL UP UI
+// ------------------------------------------------------------------
+function openLevelUp(){
+  game.mode = 'levelup';
+  document.exitPointerLock?.();
+  const pool = UPGRADES.slice();
+  const pick = [];
+  for (let i = 0; i < 3 && pool.length; i++){
+    pick.push(pool.splice((Math.random()*pool.length)|0, 1)[0]);
+  }
+  el.cards.innerHTML = '';
+  for (const u of pick){
+    const c = document.createElement('div');
+    c.className = 'card';
+    c.innerHTML = `<div class="ico">${u.ico}</div><div class="name">${u.name}</div>` +
+                  `<div class="desc">${u.desc}</div><div class="tier">${u.tier}</div>`;
+    c.onclick = () => chooseUpgrade(u);
+    el.cards.appendChild(c);
+  }
+  el.levelS.classList.remove('hidden');
+}
+function chooseUpgrade(u){
+  u.apply();
+  game.pending--;
+  el.levelS.classList.add('hidden');
+  if (game.pending > 0){ openLevelUp(); return; }
+  game.mode = 'play';
+  requestLock();
+}
+
+// ------------------------------------------------------------------
+// INPUT
+// ------------------------------------------------------------------
+function requestLock(){ canvas.requestPointerLock?.(); }
+function keyCode(e, down){
+  switch (e.code){
+    case 'KeyW': case 'ArrowUp': keys.f = down; break;
+    case 'KeyS': case 'ArrowDown': keys.b = down; break;
+    case 'KeyA': keys.l = down; break;
+    case 'KeyD': keys.r = down; break;
+    case 'ArrowLeft': if (down) player.a -= 0.16; break;
+    case 'ArrowRight': if (down) player.a += 0.16; break;
+    case 'ShiftLeft': case 'ShiftRight': keys.sprint = down; break;
+    case 'KeyR': if (down && game.mode === 'dead') startGame(); break;
+    default: return;
+  }
+  e.preventDefault();
+}
+window.addEventListener('keydown', e => keyCode(e, true));
+window.addEventListener('keyup', e => keyCode(e, false));
+
+document.addEventListener('mousemove', e => {
+  if (game.mode === 'play' && document.pointerLockElement === canvas){
+    player.a += e.movementX * CFG.turnSpeed;
+  }
 });
-document.getElementById('btn-retry').addEventListener('click',()=>{ initPlay(G.chapter,G.stage); showScreen(null); });
-document.getElementById('btn-next').addEventListener('click',()=>{
-  const gi=G.chapter*5+G.stage;
-  if(gi<9){
-    const ni=gi+1; G.chapter=Math.floor(ni/5); G.stage=ni%5; G.tactic=0;
-    buildTacticScreen(); showScreen('screen-tactic');
-  } else { buildSelectScreen(); showScreen('screen-select'); }
+canvas.addEventListener('mousedown', e => {
+  if (game.mode === 'play'){ mouseDown = true; tryShoot(); }
+  e.preventDefault();
 });
-document.getElementById('btn-to-select').addEventListener('click',()=>{ buildSelectScreen(); showScreen('screen-select'); });
+window.addEventListener('mouseup', () => { mouseDown = false; });
+window.addEventListener('contextmenu', e => { if (game.mode === 'play') e.preventDefault(); });
 
-// ── STADIUM ───────────────────────────────────────────────
-function buildStadium() {
-  const concMat = new THREE.MeshStandardMaterial({ color: 0xb0bfcc, roughness: 0.88 });
-  const trackMat = new THREE.MeshStandardMaterial({ color: 0xc05a2a, roughness: 0.85 });
-  const roofMat = new THREE.MeshStandardMaterial({ color: 0x1a2535, roughness: 0.5, metalness: 0.4, transparent: true, opacity: 0.88, side: THREE.DoubleSide });
-  const seatCols = [0x1d3f82, 0xc0392b, 0xdddddd, 0x1a5a36, 0xe6b800];
-  const TIERS=5, TW=0.9, TH=0.75;
-
-  // Running track strips (outside field lines)
-  [{x:0,z:-7.6,w:11,d:0.85},{x:0,z:7.6,w:11,d:0.85},{x:-5.3,z:0,w:0.8,d:16.6},{x:5.3,z:0,w:0.8,d:16.6}]
-  .forEach(({x,z,w,d})=>{
-    const t=new THREE.Mesh(new THREE.BoxGeometry(w,0.015,d),trackMat);
-    t.position.set(x,0.007,z); scene.add(t);
-  });
-
-  // Side stands (west / east) — pushed further out for bigger stadium
-  [-1,1].forEach(side=>{
-    const bx=side*6.5;
-    for(let t=0;t<TIERS;t++){
-      const px=bx+side*(t*TW+TW*0.5), py=t*TH+TH*0.5;
-      const slab=new THREE.Mesh(new THREE.BoxGeometry(TW,TH,22),concMat);
-      slab.position.set(px,py,0); slab.receiveShadow=true; slab.castShadow=true; scene.add(slab);
-      const seat=new THREE.Mesh(new THREE.BoxGeometry(TW*0.85,0.07,22),
-        new THREE.MeshStandardMaterial({color:seatCols[t%seatCols.length],roughness:0.7}));
-      seat.position.set(px,t*TH+TH+0.035,0); scene.add(seat);
-    }
-    const wall=new THREE.Mesh(new THREE.BoxGeometry(0.3,TIERS*TH+0.4,22),concMat);
-    wall.position.set(bx+side*(TIERS*TW+0.15),TIERS*TH*0.5,0); wall.castShadow=true; scene.add(wall);
-    const roof=new THREE.Mesh(new THREE.BoxGeometry(TIERS*TW+0.6,0.18,22.4),roofMat);
-    roof.position.set(bx+side*(TIERS*TW*0.5),TIERS*TH+0.75,0); scene.add(roof);
-  });
-
-  // End stands — NORTH ONLY (south removed so camera behind player is unobstructed)
-  const bz=-9.5; const nT=4;
-  for(let t=0;t<nT;t++){
-    const pz=bz-(t*TW+TW*0.5), py=t*TH+TH*0.5;
-    const slab=new THREE.Mesh(new THREE.BoxGeometry(14,TH,TW),concMat);
-    slab.position.set(0,py,pz); slab.receiveShadow=true; slab.castShadow=true; scene.add(slab);
-    const seat=new THREE.Mesh(new THREE.BoxGeometry(14,0.07,TW*0.85),
-      new THREE.MeshStandardMaterial({color:seatCols[t%seatCols.length],roughness:0.7}));
-    seat.position.set(0,t*TH+TH+0.035,pz); scene.add(seat);
+document.addEventListener('pointerlockchange', () => {
+  if (document.pointerLockElement !== canvas && game.mode === 'play'){
+    game.mode = 'pause'; mouseDown = false;
+    el.pause.classList.remove('hidden');
   }
-  const nRoof=new THREE.Mesh(new THREE.BoxGeometry(14.4,0.18,nT*TW+0.5),roofMat);
-  nRoof.position.set(0,nT*TH+0.75,bz-nT*TW*0.5); scene.add(nRoof);
+});
 
-  // Corner pillars (only north corners)
-  [[-1,-1],[1,-1]].forEach(([sx,sz])=>{
-    const px=sx*(6.5+TIERS*TW*0.5), pz=sz*(9.5+2*TW*0.5);
-    const pillar=new THREE.Mesh(new THREE.CylinderGeometry(0.28,0.34,TIERS*TH+1,8),concMat);
-    pillar.position.set(px,TIERS*TH*0.5,pz); pillar.castShadow=true; scene.add(pillar);
-  });
+$('startBtn').onclick = startGame;
+$('restartBtn').onclick = startGame;
+$('resumeBtn').onclick = () => {
+  el.pause.classList.add('hidden');
+  game.mode = 'play';
+  requestLock();
+};
 
-  // Floodlight poles — larger stadium positions
-  const poleMat=makeMat(0xc8d4e0,0.4,0.6);
-  const lampMat=new THREE.MeshStandardMaterial({color:0xfff8e0,emissive:0xfff5cc,emissiveIntensity:0.9});
-  [[-13,-12],[13,-12],[-13,12],[13,12]].forEach(([px,pz])=>{
-    const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.13,0.2,14,8),poleMat);
-    pole.position.set(px,7,pz); pole.castShadow=true; scene.add(pole);
-    const lamp=new THREE.Mesh(new THREE.BoxGeometry(2.2,0.4,0.8),lampMat);
-    lamp.position.set(px,14.2,pz); scene.add(lamp);
-    const pl=new THREE.PointLight(0xfff5e0,3.2,55);
-    pl.position.set(px,14,pz); scene.add(pl);
-  });
-
-  // Crowd
-  buildCrowd(TIERS,TW,TH);
+// ------------------------------------------------------------------
+// MAIN LOOP
+// ------------------------------------------------------------------
+let last = performance.now();
+function frame(now){
+  let dt = (now - last) / 1000; last = now;
+  if (dt > 0.05) dt = 0.05;
+  update(dt);
+  render();
+  syncHud();
+  requestAnimationFrame(frame);
 }
 
-function buildCrowd(TIERS,TW,TH) {
-  const dummy=new THREE.Object3D();
-  const bodyGeo=new THREE.CylinderGeometry(0.065,0.082,0.22,5);
-  const headGeo=new THREE.SphereGeometry(0.078,5,4);
-  const skinMat=new THREE.MeshStandardMaterial({color:0xffcba4,roughness:0.9});
+// ------------------------------------------------------------------
+// BOOT
+// ------------------------------------------------------------------
+parseMap(MAP_STR);
+buildSprites();
+resize();
+resetState();
+game.mode = 'menu';
+requestAnimationFrame(frame);
 
-  [{color:0x1d4ed8,n:200},{color:0xdc2626,n:140},{color:0xffffff,n:110},{color:0xf5c518,n:80}]
-  .forEach(({color,n})=>{
-    const mat=new THREE.MeshStandardMaterial({color,roughness:0.9});
-    const bIM=new THREE.InstancedMesh(bodyGeo,mat,n);
-    const hIM=new THREE.InstancedMesh(headGeo,skinMat,n);
-    let idx=0;
+// 콘솔 확인용 (개발 편의) — 배열은 resetState에서 재할당되므로 getter로 live 참조
+window.DOOMVIVOR = {
+  CFG, game, P, player, TYPES, UPGRADES,
+  get enemies(){ return enemies; },
+  get projectiles(){ return projectiles; },
+  get particles(){ return particles; },
+};
 
-    function place(x,y,z){
-      if(idx>=n) return;
-      const jx=x+(Math.random()-0.5)*0.22, jz=z+(Math.random()-0.5)*0.22;
-      dummy.position.set(jx,y+0.12,jz); dummy.rotation.y=Math.random()*Math.PI*2; dummy.updateMatrix();
-      bIM.setMatrixAt(idx,dummy.matrix);
-      dummy.position.y=y+0.31; dummy.updateMatrix();
-      hIM.setMatrixAt(idx,dummy.matrix);
-      idx++;
-    }
-
-    // Side stands (wider)
-    [-1,1].forEach(side=>{
-      const bx=side*6.5;
-      for(let t=0;t<TIERS;t++){
-        const px=bx+side*(t*TW+TW*0.5), py=t*TH+TH+0.08;
-        for(let r=0;r<28;r++){
-          if(Math.random()<0.1) continue;
-          place(px,py,-10.5+r*0.78);
-        }
-      }
-    });
-    // North end stand only
-    const cbz=-9.5;
-    for(let t=0;t<4;t++){
-      const pz=cbz-(t*TW+TW*0.5), py=t*TH+TH+0.08;
-      for(let c=0;c<18;c++){
-        if(Math.random()<0.08) continue;
-        place(-6.0+c*0.72,py,pz);
-      }
-    }
-
-    bIM.instanceMatrix.needsUpdate=true; hIM.instanceMatrix.needsUpdate=true;
-    scene.add(bIM); scene.add(hIM);
-  });
-}
-
-// ── CAMERA FOLLOW ────────────────────────────────────────
-function updateCamera(play) {
-  if (!play) return;
-  const holder = play.players[play.ballHolder];
-  const hp = to3(holder.x, holder.y);
-  // Low behind-player camera — Score!-Hero style
-  const tx = hp.x * 0.35;
-  const ty = 4.8;
-  const tz = hp.z + 7;
-  const lr = 0.06; // lerp rate
-  camera.position.x += (tx - camera.position.x) * lr;
-  camera.position.y += (ty - camera.position.y) * lr;
-  camera.position.z += (tz - camera.position.z) * lr;
-  // Look toward goal, slightly above ground
-  camera.lookAt(hp.x * 0.15, 0.3, hp.z - 7);
-}
-
-// ── MAIN LOOP ─────────────────────────────────────────────
-function buildScene() {
-  // Sky dome
-  const sky = new THREE.Mesh(
-    new THREE.SphereGeometry(90, 16, 16),
-    new THREE.MeshBasicMaterial({ color: 0x7ab8f5, side: THREE.BackSide })
-  );
-  scene.add(sky);
-
-  buildField(); buildGoal(); buildStadium();
-  selRing = makeSelRing();
-  aimLine = makeAimLine();
-  powerRing = makePowerRing();
-  makeAimDots();
-  initBallShadow();
-  initParticles();
-}
-
-buildScene();
-showScreen('screen-title');
-
-let lastT=0, pulse=0;
-
-function loop(ts) {
-  const dt=Math.min(ts-lastT,50); lastT=ts; pulse++;
-  renderer.render(scene, camera);
-
-  if (G.screen!=='play'||!G.play) { requestAnimationFrame(loop); return; }
-  const play=G.play;
-  renderer.setClearColor(0x7ab8f5); // reset flash
-
-  // Timer
-  if(play.st.timeLimit && play.phase==='idle'){
-    play.timeLeft-=dt/1000;
-    if(play.timeLeft<=0){ play.timeLeft=0; triggerFail(play); }
-    updateHUD();
-  }
-
-  // Ball animation + collision
-  if(play.phase==='flying'){
-    tickAnim(play,dt);
-    tickDefenders(play,dt);
-    if(checkIntercept(play)){ play.ballAnim=null; if(ballMesh) ballMesh.position.y=0.18; triggerFail(play); }
-    else if(checkGKSave(play)){ play.ballAnim=null; if(ballMesh) ballMesh.position.y=0.18; triggerFail(play); }
-  } else {
-    tickDefenders(play,dt);
-  }
-
-  // Goal phase
-  if(play.phase==='goal'){
-    play.goalTimer+=dt;
-    tickParticles();
-    // GOAL! text via DOM (quick banner)
-    const banner=document.getElementById('hud-goal-text');
-    banner.textContent='⚽ GOAL!'; banner.style.color='#f5c518'; banner.style.fontSize='22px'; banner.style.fontWeight='900';
-    if(play.goalTimer>1600){
-      banner.style.fontSize=''; banner.style.fontWeight=''; banner.style.color='';
-      const r={scored:true,passes:play.passes,actions:play.actions,maxPower:play.maxPower,curved:play.curved,cornerShot:play.cornerShot,timeLeft:play.timeLeft};
-      const stars=play.st.calcStars(r);
-      const gi=G.chapter*5+G.stage;
-      if(stars>G.stars[gi]){ G.stars[gi]=stars; doSave(); }
-      showResult(true,stars,play.passes,play.timeLeft);
-    }
-  }
-
-  // Fail phase
-  if(play.phase==='fail'){
-    play.flashTimer+=dt;
-    renderer.setClearColor(0x3b0000);
-    if(play.flashTimer>900){
-      renderer.setClearColor(0x0a1628);
-      if(play.failCount>=3){
-        const gi=G.chapter*5+G.stage;
-        G.stars[gi]=Math.max(G.stars[gi],0);
-        showResult(false,0,play.passes,play.timeLeft);
-      } else {
-        resetPlay(play); updateHUD();
-      }
-    }
-  }
-
-  updateCamera(play);
-  syncActors(play, pulse);
-  requestAnimationFrame(loop);
-}
-requestAnimationFrame(loop);
+})();

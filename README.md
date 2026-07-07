@@ -1,43 +1,61 @@
-# Clutch Star MVP
+# DOOMVIVOR — 둠 × 뱀서
 
-## 바로 플레이(배포 링크)
-GitHub Pages 배포가 완료되면 아래 형식으로 접속:
+레이캐스팅 1인칭 슈터에 **뱀파이어 서바이벌식 호드 + 로그라이트 성장**을 얹은 웹 게임.
+외부 라이브러리 없이 순수 HTML5 Canvas + Vanilla JS로 동작합니다. (파일 3개)
 
-- `https://<github-username>.github.io/<repo-name>/`
+> 쉬지 말고 몰아쳐라 — 연속 처치(콤보)가 곧 힘이다.
 
-## 로컬 실행
-1. 저장소 폴더에서 서버 실행
-   - `python -m http.server 8000`
-2. 브라우저 접속
-   - `http://localhost:8000`
+## 플레이
+
+로컬 서버로 열거나(권장) `index.html`을 브라우저로 바로 엽니다.
+
+```bash
+python -m http.server 8000
+# http://localhost:8000
+```
+
+마우스 조준(포인터 락)을 쓰므로 화면을 한 번 클릭해 시작하세요.
 
 ## 조작
-- 이동: 방향키 또는 WASD
-- 킥: Space
-- 재시작: R
 
-## 게임 규칙
-- 제한시간: 90초
-- 골 존(노란 영역)에 공 넣기: +10점
-- 수비수와 접촉: 체력 -1
-- 체력 0 또는 시간 종료 시 게임 종료
+| 키 | 동작 |
+|---|---|
+| `W` `A` `S` `D` / `←` `→` | 이동 · 스트레이프 · 회전 |
+| `MOUSE` | 조준 (좌우) |
+| `CLICK` (홀드 가능) | 사격 |
+| `SHIFT` | 질주 |
+| `ESC` | 일시정지 |
+| `R` | 게임오버 후 재시작 |
 
-## 인증 방법(자동 배포용)
-권한이 좁은 Fine-grained PAT(추천) 사용:
+## 게임 시스템
 
-1. GitHub > Settings > Developer settings > Personal access tokens > Fine-grained tokens
-2. Token permissions 설정
-   - Repository access: 배포할 리포 1개
-   - Permissions
-     - Contents: Read and write
-     - Actions: Read and write
-     - Pages: Read and write
-3. 토큰 발급 후 로컬 환경변수로 저장
-   - `export GITHUB_USER="<github-username>"`
-   - `export GITHUB_REPO="<repo-name>"`
-   - `export GITHUB_TOKEN="<fine-grained-token>"`
+- **호드 스폰** — 시간이 갈수록 적이 더 자주·더 많이·더 강하게 몰려옵니다. (imp / hound / brute / caster)
+- **경험치 & 레벨업** — 처치 시 XP 획득, 레벨업마다 업그레이드 **3택1**.
+- **콤보(광폭화)** — 연속 처치로 배율(x1 → SSS)이 오르고 **XP·점수·데미지**가 증가.
+  피격 시 콤보 초기화 → 맞지 않고 공격적으로 파고들수록 강해지는 DOOM식 루프.
+- **웨이브 / 생존 점수** — 최대한 오래 버티며 점수를 쌓습니다.
 
-## 자동 배포 실행
-- `./scripts/deploy_with_token.sh`
+## 구조 & 확장(바이브 코딩 포인트)
 
-성공 시 현재 커밋이 `main`으로 push 되고, GitHub Actions가 Pages 배포를 진행.
+전부 `game.js` 한 파일. 상단 상수만 바꿔도 밸런스/콘텐츠가 달라집니다.
+
+| 위치 | 무엇 |
+|---|---|
+| `CFG` | 이동/사격/시야/난이도 등 전역 밸런스 |
+| `MAP_STR` | 아레나 맵 (`#` 벽, `.` 바닥, `P` 시작점) |
+| `TYPES` | 적 종류·스탯 (여기 추가하면 새 적) |
+| `SPR` / `buildSprites()` | 적·투사체 스프라이트(캔버스 도형으로 그림) |
+| `UPGRADES` | 레벨업 카드 (배열에 추가만 하면 등장) |
+
+브라우저 콘솔에서 `DOOMVIVOR` 객체로 `CFG` / `game` / `P`(플레이어 스탯) / `enemies` 등을 실시간으로 만질 수 있습니다.
+
+## 기술
+
+- 레이캐스팅 벽 렌더(DDA) + 빌보드 스프라이트(퍼-컬럼 z-buffer 가림)
+- 외부 의존성 0, 에셋 파일 0 (스프라이트는 런타임에 캔버스로 생성)
+
+## 다음에 붙이면 좋은 것 (TODO 아이디어)
+
+- 무기 다양화(샷건 산탄, 로켓, 근접), 보스 웨이브
+- 덱빌딩식 업그레이드 시너지, 아이템/픽업
+- 벽 텍스처, 사운드, 사망 연출, 하이스코어 저장
